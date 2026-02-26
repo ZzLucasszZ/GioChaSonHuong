@@ -1,14 +1,17 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/utils/logger.dart';
 import '../data/database/database_helper.dart';
 import '../data/models/product.dart';
 import '../data/repositories/order_repository.dart';
 import '../data/repositories/product_repository.dart';
+import '../services/google_drive_backup_service.dart';
 
 /// Provider for product state management
 class ProductProvider extends ChangeNotifier {
   final ProductRepository _repository;
   final OrderRepository _orderRepository;
+  final GoogleDriveBackupService _gDriveBackup = GoogleDriveBackupService();
 
   List<Product> _products = [];
   List<Product> _lowStockProducts = [];
@@ -19,6 +22,12 @@ class ProductProvider extends ChangeNotifier {
   ProductProvider(DatabaseHelper dbHelper)
       : _repository = ProductRepository(dbHelper),
         _orderRepository = OrderRepository(dbHelper);
+
+  void _triggerAutoBackup() {
+    _gDriveBackup.autoBackup().catchError((e) {
+      AppLogger.warning('Auto-backup skipped: $e', tag: 'AutoBackup');
+    });
+  }
 
   // Getters
   List<Product> get products => _products;
@@ -83,6 +92,7 @@ class ProductProvider extends ChangeNotifier {
       await _repository.insert(product);
       _products.insert(0, product);
       notifyListeners();
+      _triggerAutoBackup();
 
       return product;
     } catch (e) {
@@ -103,6 +113,7 @@ class ProductProvider extends ChangeNotifier {
         notifyListeners();
       }
 
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể cập nhật sản phẩm: $e';
@@ -117,6 +128,7 @@ class ProductProvider extends ChangeNotifier {
       await _repository.delete(id);
       _products.removeWhere((p) => p.id == id);
       notifyListeners();
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể xóa sản phẩm: $e';
@@ -172,6 +184,7 @@ class ProductProvider extends ChangeNotifier {
         notifyListeners();
       }
 
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể cập nhật tồn kho: $e';

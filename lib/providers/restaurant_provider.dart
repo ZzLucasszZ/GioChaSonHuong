@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/utils/logger.dart';
 import '../data/database/database_helper.dart';
 import '../data/models/restaurant.dart';
 import '../data/repositories/restaurant_repository.dart';
+import '../services/google_drive_backup_service.dart';
 
 /// Provider for restaurant state management
 class RestaurantProvider extends ChangeNotifier {
   final RestaurantRepository _repository;
+  final GoogleDriveBackupService _gDriveBackup = GoogleDriveBackupService();
   
   List<Restaurant> _restaurants = [];
   bool _isLoading = false;
@@ -14,6 +17,12 @@ class RestaurantProvider extends ChangeNotifier {
 
   RestaurantProvider(DatabaseHelper dbHelper)
       : _repository = RestaurantRepository(dbHelper);
+
+  void _triggerAutoBackup() {
+    _gDriveBackup.autoBackup().catchError((e) {
+      AppLogger.warning('Auto-backup skipped: $e', tag: 'AutoBackup');
+    });
+  }
 
   // Getters
   List<Restaurant> get restaurants => _restaurants;
@@ -74,6 +83,7 @@ class RestaurantProvider extends ChangeNotifier {
       _restaurants.insert(0, restaurant);
       _error = null;
       notifyListeners();
+      _triggerAutoBackup();
       
       return restaurant;
     } catch (e) {
@@ -95,6 +105,7 @@ class RestaurantProvider extends ChangeNotifier {
         notifyListeners();
       }
       
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể cập nhật nhà hàng: $e';
@@ -109,6 +120,7 @@ class RestaurantProvider extends ChangeNotifier {
       await _repository.delete(id);
       _restaurants.removeWhere((r) => r.id == id);
       notifyListeners();
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể xóa nhà hàng: $e';

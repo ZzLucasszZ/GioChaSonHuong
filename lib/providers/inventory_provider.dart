@@ -1,17 +1,26 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/utils/logger.dart';
 import '../data/database/database_helper.dart';
 import '../data/models/inventory_transaction.dart';
 import '../data/models/product.dart';
 import '../data/repositories/inventory_repository.dart';
+import '../services/google_drive_backup_service.dart';
 
 class InventoryProvider with ChangeNotifier {
   final InventoryRepository _inventoryRepository = InventoryRepository(DatabaseHelper.instance);
+  final GoogleDriveBackupService _gDriveBackup = GoogleDriveBackupService();
 
   List<Product> _products = [];
   List<InventoryTransaction> _transactions = [];
   bool _isLoading = false;
   String? _error;
+
+  void _triggerAutoBackup() {
+    _gDriveBackup.autoBackup().catchError((e) {
+      AppLogger.warning('Auto-backup skipped: $e', tag: 'AutoBackup');
+    });
+  }
 
   List<Product> get products => _products;
   List<InventoryTransaction> get transactions => _transactions;
@@ -57,6 +66,7 @@ class InventoryProvider with ChangeNotifier {
         notes: notes,
       );
       await loadInventories();
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể nhập kho: $e';
@@ -78,6 +88,7 @@ class InventoryProvider with ChangeNotifier {
         notes: notes,
       );
       await loadInventories();
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể xuất kho: $e';
@@ -142,6 +153,7 @@ class InventoryProvider with ChangeNotifier {
         notes: notes,
       );
       notifyListeners();
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể cập nhật: $e';
@@ -155,6 +167,7 @@ class InventoryProvider with ChangeNotifier {
     try {
       await _inventoryRepository.deleteTransaction(transactionId);
       notifyListeners();
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể xóa: $e';

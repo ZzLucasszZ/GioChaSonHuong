@@ -35,6 +35,12 @@ dependencies:
   flutter_slidable: ^3.0.0
   sqflite_common_ffi_web: ^1.1.1
   sqflite_common_ffi: ^2.4.0+2
+  
+  # Google Drive Backup
+  google_sign_in: ^6.2.1
+  googleapis: ^13.2.0
+  googleapis_auth: ^1.6.0
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:

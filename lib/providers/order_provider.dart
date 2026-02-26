@@ -10,12 +10,14 @@ import '../data/models/payment.dart';
 import '../data/repositories/inventory_repository.dart';
 import '../data/repositories/order_repository.dart';
 import '../data/repositories/payment_repository.dart';
+import '../services/google_drive_backup_service.dart';
 
 /// Provider for order state management
 class OrderProvider extends ChangeNotifier {
   final OrderRepository _repository;
   final PaymentRepository _paymentRepository;
   final InventoryRepository _inventoryRepository;
+  final GoogleDriveBackupService _gDriveBackup = GoogleDriveBackupService();
 
   List<Order> _orders = [];
   Order? _currentOrder;
@@ -27,6 +29,13 @@ class OrderProvider extends ChangeNotifier {
       : _repository = OrderRepository(dbHelper),
         _paymentRepository = PaymentRepository(dbHelper),
         _inventoryRepository = InventoryRepository(dbHelper);
+
+  // Fire-and-forget auto backup (throttled, silent)
+  void _triggerAutoBackup() {
+    _gDriveBackup.autoBackup().catchError((e) {
+      AppLogger.warning('Auto-backup skipped: $e', tag: 'AutoBackup');
+    });
+  }
 
   // Getters
   List<Order> get orders => _orders;
@@ -121,6 +130,7 @@ class OrderProvider extends ChangeNotifier {
       _selectedDate = deliveryDate;
       await loadOrdersForDate(restaurantId, deliveryDate);
 
+      _triggerAutoBackup();
       return order;
     } catch (e, stack) {
       AppLogger.error('Failed to create order', error: e, stackTrace: stack, tag: 'OrderProvider');
@@ -199,6 +209,7 @@ class OrderProvider extends ChangeNotifier {
         notifyListeners();
       }
 
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể cập nhật trạng thái: $e';
@@ -221,6 +232,7 @@ class OrderProvider extends ChangeNotifier {
       await _repository.addPayment(orderId, amount);
 
       AppLogger.success('Payment processed successfully', tag: 'OrderProvider');
+      _triggerAutoBackup();
 
       // Reload order to check new payment status
       final updatedOrder = await _repository.findById(orderId);
@@ -288,6 +300,7 @@ class OrderProvider extends ChangeNotifier {
       );
       if (result != null) {
         notifyListeners();
+        _triggerAutoBackup();
         return true;
       }
       return false;
@@ -303,6 +316,7 @@ class OrderProvider extends ChangeNotifier {
       final result = await _paymentRepository.deletePaymentForOrder(paymentId);
       if (result > 0) {
         notifyListeners();
+        _triggerAutoBackup();
         return true;
       }
       return false;
@@ -329,6 +343,7 @@ class OrderProvider extends ChangeNotifier {
         notes: notes ?? 'Bản ghi bổ sung',
       );
       AppLogger.success('Payment record inserted (reconciliation)', tag: 'OrderProvider');
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       AppLogger.error('Failed to insert payment record', error: e, tag: 'OrderProvider');
@@ -382,6 +397,7 @@ class OrderProvider extends ChangeNotifier {
       }
       
       notifyListeners();
+      _triggerAutoBackup();
     } catch (e) {
       _error = 'Không thể cập nhật sản phẩm: $e';
       notifyListeners();
@@ -411,6 +427,7 @@ class OrderProvider extends ChangeNotifier {
       _currentOrder = null;
       
       notifyListeners();
+      _triggerAutoBackup();
       AppLogger.success('Order updated successfully', tag: 'OrderProvider');
     } catch (e, stack) {
       AppLogger.error('Failed to update order', error: e, stackTrace: stack, tag: 'OrderProvider');
@@ -435,6 +452,7 @@ class OrderProvider extends ChangeNotifier {
         notes: notes,
       );
       notifyListeners();
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể thêm nợ: $e';
@@ -458,6 +476,7 @@ class OrderProvider extends ChangeNotifier {
         notes: notes,
       );
       notifyListeners();
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể cập nhật nợ: $e';
@@ -472,6 +491,7 @@ class OrderProvider extends ChangeNotifier {
       await _repository.delete(orderId);
       _orders.removeWhere((o) => o.id == orderId);
       notifyListeners();
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể xóa nợ: $e';
@@ -486,6 +506,7 @@ class OrderProvider extends ChangeNotifier {
       await _repository.delete(orderId);
       _orders.removeWhere((o) => o.id == orderId);
       notifyListeners();
+      _triggerAutoBackup();
       return true;
     } catch (e) {
       _error = 'Không thể xóa đơn hàng: $e';

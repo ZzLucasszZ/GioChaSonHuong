@@ -16,6 +16,7 @@ import 'providers/product_provider.dart';
 import 'providers/inventory_provider.dart';
 import 'screens/main_screen.dart';
 import 'scripts/seed_products.dart';
+import 'services/google_drive_backup_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,6 +69,11 @@ void main() async {
   }
   
   runApp(MainApp(dbHelper: dbHelper));
+
+  // Trigger auto-backup silently on app startup (throttled to once/hour)
+  GoogleDriveBackupService().autoBackup().catchError((e) {
+    AppLogger.warning('Startup auto-backup skipped: $e', tag: 'AutoBackup');
+  });
 }
 
 class MainApp extends StatelessWidget {
