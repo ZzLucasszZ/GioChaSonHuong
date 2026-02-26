@@ -1,0 +1,56 @@
+name: order_inventory_app
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.10.8
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  
+  # Database
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  
+  # State Management
+  provider: ^6.0.5
+  
+  # Utilities
+  intl: ^0.20.2
+  uuid: ^4.2.1
+  
+  # PDF & Sharing
+  pdf: ^3.10.0
+  printing: ^5.12.0
+  share_plus: ^7.2.0
+  path_provider: ^2.1.1
+  url_launcher: ^6.2.0
+  file_picker: ^8.1.6
+  
+  # UI Components
+  flutter_slidable: ^3.0.0
+  sqflite_common_ffi_web: ^1.1.1
+  sqflite_common_ffi: ^2.4.0+2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.1
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/app_icon.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/app_icon.png"
