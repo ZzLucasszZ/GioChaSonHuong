@@ -14,6 +14,7 @@ class Product {
   final double minStockAlert;
   final String? category;
   final bool isActive;
+  final bool showInInventory;
   final int defaultQuantityPerTable; // Number of items per table by default
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -28,6 +29,7 @@ class Product {
     required this.minStockAlert,
     this.category,
     this.isActive = true,
+    this.showInInventory = true,
     this.defaultQuantityPerTable = 1,
     required this.createdAt,
     required this.updatedAt,
@@ -62,6 +64,7 @@ class Product {
     double minStockAlert = 0,
     String? category,
     bool isActive = true,
+    bool showInInventory = true,
   }) {
     final now = DateTime.now();
     return Product(
@@ -74,6 +77,7 @@ class Product {
       minStockAlert: minStockAlert,
       category: category,
       isActive: isActive,
+      showInInventory: showInInventory,
       createdAt: now,
       updatedAt: now,
     );
@@ -91,6 +95,7 @@ class Product {
       minStockAlert: (map[DbConstants.colMinStockAlert] as num).toDouble(),
       category: map[DbConstants.colCategory] as String?,
       isActive: (map[DbConstants.colIsActive] as int?) == 1,
+      showInInventory: (map[DbConstants.colShowInInventory] as int?) != 0,
       createdAt: AppDateUtils.parseDbDateTime(map[DbConstants.colCreatedAt] as String) ?? DateTime.now(),
       updatedAt: AppDateUtils.parseDbDateTime(map[DbConstants.colUpdatedAt] as String) ?? DateTime.now(),
     );
@@ -108,6 +113,7 @@ class Product {
       DbConstants.colMinStockAlert: minStockAlert,
       DbConstants.colCategory: category,
       DbConstants.colIsActive: isActive ? 1 : 0,
+      DbConstants.colShowInInventory: showInInventory ? 1 : 0,
       DbConstants.colCreatedAt: AppDateUtils.toDbDateTime(createdAt),
       DbConstants.colUpdatedAt: AppDateUtils.toDbDateTime(updatedAt),
     };
@@ -124,6 +130,7 @@ class Product {
     double? minStockAlert,
     String? category,
     bool? isActive,
+    bool? showInInventory,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -137,6 +144,7 @@ class Product {
       minStockAlert: minStockAlert ?? this.minStockAlert,
       category: category ?? this.category,
       isActive: isActive ?? this.isActive,
+      showInInventory: showInInventory ?? this.showInInventory,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );

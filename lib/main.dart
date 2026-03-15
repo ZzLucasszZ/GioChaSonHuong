@@ -14,8 +14,9 @@ import 'providers/restaurant_provider.dart';
 import 'providers/order_provider.dart';
 import 'providers/product_provider.dart';
 import 'providers/inventory_provider.dart';
+import 'providers/rental_provider.dart';
 import 'screens/main_screen.dart';
-import 'scripts/seed_products.dart';
+
 import 'services/google_drive_backup_service.dart';
 
 void main() async {
@@ -58,11 +59,6 @@ void main() async {
   try {
     await dbHelper.database; // Ensure database is created
     AppLogger.success('Database initialized successfully');
-    
-    // Seed initial products (only runs once)
-    AppLogger.info('Seeding products...');
-    await seedProducts();
-    AppLogger.success('Products seeded successfully');
   } catch (e, stack) {
     AppLogger.error('Failed to initialize database', error: e, stackTrace: stack);
     rethrow;
@@ -96,6 +92,9 @@ class MainApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (_) => InventoryProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => RentalProvider(dbHelper),
         ),
       ],
       child: MaterialApp(

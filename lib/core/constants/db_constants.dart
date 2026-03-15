@@ -4,7 +4,7 @@ class DbConstants {
 
   // Database info
   static const String databaseName = 'order_inventory.db';
-  static const int databaseVersion = 4;
+  static const int databaseVersion = 6;
 
   // Table names
   static const String tableRestaurants = 'restaurants';
@@ -15,6 +15,10 @@ class DbConstants {
   static const String tableInventoryTransactions = 'inventory_transactions';
   static const String tablePayments = 'payments';
   static const String tableAppSettings = 'app_settings';
+
+  // Rental tables
+  static const String tableTenants = 'tenants';
+  static const String tableRentalInvoices = 'rental_invoices';
 
   // Common columns
   static const String colId = 'id';
@@ -36,6 +40,7 @@ class DbConstants {
   static const String colCurrentStock = 'current_stock';
   static const String colMinStockAlert = 'min_stock_alert';
   static const String colCategory = 'category';
+  static const String colShowInInventory = 'show_in_inventory';
 
   // Restaurant prices columns
   static const String colRestaurantId = 'restaurant_id';
@@ -73,4 +78,27 @@ class DbConstants {
   // App settings columns
   static const String colKey = 'key';
   static const String colValue = 'value';
+
+  // Tenants columns
+  static const String colRoomNumber = 'room_number';
+  static const String colRentAmount = 'rent_amount';
+  static const String colElectricityRate = 'electricity_rate';
+  static const String colWaterRate = 'water_rate';
+  static const String colMoveInDate = 'move_in_date';
+
+  // Rental invoices columns
+  static const String colTenantId = 'tenant_id';
+  static const String colMonth = 'month';
+  static const String colYear = 'year';
+  // colRentAmount reused from tenants
+  static const String colElectricityOld = 'electricity_old';
+  static const String colElectricityNew = 'electricity_new';
+  static const String colElectricityAmount = 'electricity_amount';
+  static const String colWaterOld = 'water_old';
+  static const String colWaterNew = 'water_new';
+  static const String colWaterAmount = 'water_amount';
+  static const String colOtherFees = 'other_fees';
+  static const String colOtherFeesNote = 'other_fees_note';
+  // colTotalAmount reused from orders
+  static const String colIsPaid = 'is_paid';
 }

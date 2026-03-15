@@ -125,6 +125,33 @@ class AppTheme {
         elevation: 8,
       ),
 
+      // Material 3 NavigationBar theme
+      navigationBarTheme: NavigationBarThemeData(
+        height: 62,
+        elevation: 3,
+        backgroundColor: AppColors.surface,
+        indicatorColor: AppColors.primary.withValues(alpha: 0.12),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primary,
+            );
+          }
+          return const TextStyle(
+            fontSize: 11,
+            color: AppColors.textSecondary,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const IconThemeData(size: 22, color: AppColors.primary);
+          }
+          return const IconThemeData(size: 22, color: AppColors.textSecondary);
+        }),
+      ),
+
       // Divider theme
       dividerTheme: const DividerThemeData(
         color: AppColors.divider,

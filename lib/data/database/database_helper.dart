@@ -48,6 +48,8 @@ class DatabaseHelper {
     await db.execute(MigrationV1.createInventoryTransactionsTable);
     await db.execute(MigrationV1.createPaymentsTable);
     await db.execute(MigrationV1.createAppSettingsTable);
+    await db.execute(MigrationV1.createTenantsTable);
+    await db.execute(MigrationV1.createRentalInvoicesTable);
 
     // Create indexes
     for (final index in MigrationV1.createIndexes) {
@@ -113,6 +115,23 @@ class DatabaseHelper {
 
     if (oldVersion < 4) {
       await _migrateV4MarkDeliveredAndDeductStock(db);
+    }
+
+    if (oldVersion < 5) {
+      // V5: Add show_in_inventory column to products table.
+      // This allows hiding products from inventory tab without deleting them.
+      await db.execute('''
+        ALTER TABLE ${DbConstants.tableProducts}
+        ADD COLUMN ${DbConstants.colShowInInventory} INTEGER NOT NULL DEFAULT 1
+      ''');
+    }
+
+    if (oldVersion < 6) {
+      // V6: Add rental management tables (tenants + rental_invoices)
+      await db.execute(MigrationV1.createTenantsTable);
+      await db.execute(MigrationV1.createRentalInvoicesTable);
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_rental_invoices_tenant ON ${DbConstants.tableRentalInvoices}(${DbConstants.colTenantId})');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_rental_invoices_month ON ${DbConstants.tableRentalInvoices}(${DbConstants.colYear}, ${DbConstants.colMonth})');
     }
   }
 

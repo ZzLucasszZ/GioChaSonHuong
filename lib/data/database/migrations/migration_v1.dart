@@ -29,6 +29,7 @@ class MigrationV1 {
       ${DbConstants.colMinStockAlert} REAL NOT NULL DEFAULT 0,
       ${DbConstants.colCategory} TEXT,
       ${DbConstants.colIsActive} INTEGER DEFAULT 1,
+      ${DbConstants.colShowInInventory} INTEGER NOT NULL DEFAULT 1,
       ${DbConstants.colCreatedAt} TEXT NOT NULL,
       ${DbConstants.colUpdatedAt} TEXT NOT NULL
     )
@@ -158,7 +159,56 @@ class MigrationV1 {
     'CREATE INDEX idx_payments_order ON ${DbConstants.tablePayments}(${DbConstants.colOrderId})',
     'CREATE INDEX idx_payments_date ON ${DbConstants.tablePayments}(${DbConstants.colPaymentDate})',
     'CREATE INDEX idx_payments_created ON ${DbConstants.tablePayments}(${DbConstants.colCreatedAt})',
+
+    // Rental indexes
+    'CREATE INDEX idx_rental_invoices_tenant ON ${DbConstants.tableRentalInvoices}(${DbConstants.colTenantId})',
+    'CREATE INDEX idx_rental_invoices_month ON ${DbConstants.tableRentalInvoices}(${DbConstants.colYear}, ${DbConstants.colMonth})',
   ];
+
+  // Tenants table
+  static const String createTenantsTable = '''
+    CREATE TABLE IF NOT EXISTS ${DbConstants.tableTenants} (
+      ${DbConstants.colId} TEXT PRIMARY KEY,
+      ${DbConstants.colName} TEXT NOT NULL,
+      ${DbConstants.colPhone} TEXT,
+      ${DbConstants.colRoomNumber} TEXT NOT NULL,
+      ${DbConstants.colRentAmount} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colElectricityRate} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colWaterRate} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colMoveInDate} TEXT,
+      ${DbConstants.colNotes} TEXT,
+      ${DbConstants.colIsActive} INTEGER DEFAULT 1,
+      ${DbConstants.colCreatedAt} TEXT NOT NULL,
+      ${DbConstants.colUpdatedAt} TEXT NOT NULL
+    )
+  ''';
+
+  // Rental invoices table
+  static const String createRentalInvoicesTable = '''
+    CREATE TABLE IF NOT EXISTS ${DbConstants.tableRentalInvoices} (
+      ${DbConstants.colId} TEXT PRIMARY KEY,
+      ${DbConstants.colTenantId} TEXT NOT NULL,
+      ${DbConstants.colMonth} INTEGER NOT NULL,
+      ${DbConstants.colYear} INTEGER NOT NULL,
+      ${DbConstants.colRentAmount} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colElectricityOld} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colElectricityNew} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colElectricityRate} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colElectricityAmount} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colWaterOld} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colWaterNew} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colWaterRate} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colWaterAmount} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colOtherFees} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colOtherFeesNote} TEXT,
+      ${DbConstants.colTotalAmount} REAL NOT NULL DEFAULT 0,
+      ${DbConstants.colIsPaid} INTEGER NOT NULL DEFAULT 0,
+      ${DbConstants.colNotes} TEXT,
+      ${DbConstants.colCreatedAt} TEXT NOT NULL,
+      ${DbConstants.colUpdatedAt} TEXT NOT NULL,
+      FOREIGN KEY (${DbConstants.colTenantId}) REFERENCES ${DbConstants.tableTenants}(${DbConstants.colId}) ON DELETE CASCADE
+    )
+  ''';
 
   // Default settings
   static const List<Map<String, String>> defaultSettings = [
