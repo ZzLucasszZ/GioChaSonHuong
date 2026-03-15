@@ -8,13 +8,15 @@ import '../../core/utils/thousands_separator_formatter.dart';
 import '../../core/utils/vietnamese_utils.dart';
 import '../../data/models/models.dart';
 import '../../providers/product_provider.dart';
+import '../shared/wake_toggle_button.dart';
 
 String formatCurrency(int amount) {
   return '${amount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}₫';
 }
 
 class ProductManagementScreen extends StatefulWidget {
-  const ProductManagementScreen({super.key});
+  final String? initialSearchQuery;
+  const ProductManagementScreen({super.key, this.initialSearchQuery});
 
   @override
   State<ProductManagementScreen> createState() => _ProductManagementScreenState();
@@ -27,10 +29,25 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialSearchQuery != null && widget.initialSearchQuery!.isNotEmpty) {
+      _searchController.text = widget.initialSearchQuery!;
+      _searchQuery = widget.initialSearchQuery!;
+    }
     // Load products when screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProductProvider>().loadProducts();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant ProductManagementScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialSearchQuery != null &&
+        widget.initialSearchQuery != oldWidget.initialSearchQuery &&
+        widget.initialSearchQuery!.isNotEmpty) {
+      _searchController.text = widget.initialSearchQuery!;
+      setState(() => _searchQuery = widget.initialSearchQuery!);
+    }
   }
 
   @override
@@ -45,6 +62,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
       appBar: AppBar(
         title: const Text('Quản lý sản phẩm'),
         actions: [
+          const WakeToggleButton(),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => _showProductDialog(),

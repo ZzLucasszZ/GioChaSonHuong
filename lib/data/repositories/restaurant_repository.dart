@@ -133,4 +133,34 @@ class RestaurantRepository extends BaseRepository<Restaurant> {
     );
     return (result.first['count'] as int?) ?? 0;
   }
+
+  /// Delete restaurant and all related data (order_items → orders → restaurant)
+  /// Payments and restaurant_prices cascade automatically via FK.
+  Future<void> deleteWithAllData(String restaurantId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // 1. Delete order_items for all orders belonging to this restaurant
+      await txn.rawDelete('''
+        DELETE FROM ${DbConstants.tableOrderItems}
+        WHERE ${DbConstants.colOrderId} IN (
+          SELECT ${DbConstants.colId} FROM ${DbConstants.tableOrders}
+          WHERE ${DbConstants.colRestaurantId} = ?
+        )
+      ''', [restaurantId]);
+
+      // 2. Delete all orders for this restaurant
+      await txn.delete(
+        DbConstants.tableOrders,
+        where: '${DbConstants.colRestaurantId} = ?',
+        whereArgs: [restaurantId],
+      );
+
+      // 3. Delete the restaurant (cascades restaurant_prices + payments)
+      await txn.delete(
+        DbConstants.tableRestaurants,
+        where: '${DbConstants.colId} = ?',
+        whereArgs: [restaurantId],
+      );
+    });
+  }
 }

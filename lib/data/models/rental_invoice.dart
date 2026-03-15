@@ -3,6 +3,24 @@ import 'package:uuid/uuid.dart';
 import '../../core/constants/db_constants.dart';
 import '../../core/utils/date_utils.dart';
 
+/// Payment lifecycle stages for a rental invoice.
+enum RentalPaymentStatus {
+  /// No payment at all, meter readings known.
+  unpaid,
+
+  /// No payment, electricity/water not yet read (advance created invoice).
+  unpaidPending,
+
+  /// Rent collected in advance; electricity/water not yet read.
+  rentPaidPending,
+
+  /// Rent already collected; electricity/water due now.
+  rentPaidDue,
+
+  /// Fully settled (rent + electricity + water).
+  fullyPaid,
+}
+
 /// Rental invoice (hóa đơn cho thuê) model
 class RentalInvoice {
   final String id;
@@ -22,6 +40,13 @@ class RentalInvoice {
   final String? otherFeesNote;
   final double totalAmount;
   final bool isPaid;
+  final DateTime? paidAt;
+  final DateTime? rentPaidAt;
+
+  /// True when this invoice was created in advance and meter readings have not
+  /// been entered yet. Stored in DB to distinguish "real 0 usage" from
+  /// "placeholder same-value readings" created by multi-month batch creation.
+  final bool isPendingMeter;
   final String? notes;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -48,6 +73,9 @@ class RentalInvoice {
     this.otherFeesNote,
     required this.totalAmount,
     this.isPaid = false,
+    this.paidAt,
+    this.rentPaidAt,
+    this.isPendingMeter = false,
     this.notes,
     required this.createdAt,
     required this.updatedAt,
@@ -60,6 +88,56 @@ class RentalInvoice {
 
   /// Water usage
   double get waterUsage => waterNew - waterOld;
+
+  /// True when no meter readings have been entered yet.
+  bool get hasPendingMeterReading {
+    // Explicitly flagged pending — always pending until user explicitly clears
+    // via the edit form (which sets isPendingMeter=false when readings are saved).
+    if (isPendingMeter) return true;
+    // Legacy: all-zero readings from before isPendingMeter flag existed.
+    if (electricityOld == 0 &&
+        electricityNew == 0 &&
+        waterOld == 0 &&
+        waterNew == 0) return true;
+    // Negative usage = bad/corrupt data, treat as pending.
+    if (electricityUsage < 0 || waterUsage < 0) return true;
+    return false;
+  }
+
+  /// Whether the rent portion has been collected (may still owe electricity/water).
+  bool get isRentPaid => rentPaidAt != null;
+
+  /// Full payment lifecycle state derived from [isPaid], [rentPaidAt], and [hasPendingMeterReading].
+  RentalPaymentStatus get paymentStatus {
+    if (isPaid) return RentalPaymentStatus.fullyPaid;
+    if (rentPaidAt != null) {
+      return hasPendingMeterReading
+          ? RentalPaymentStatus.rentPaidPending
+          : RentalPaymentStatus.rentPaidDue;
+    }
+    return hasPendingMeterReading
+        ? RentalPaymentStatus.unpaidPending
+        : RentalPaymentStatus.unpaid;
+  }
+
+  /// Amount still owed by tenant for this invoice.
+  /// - fullyPaid → 0
+  /// - rentPaidPending → 0 (rent done, utilities unknown yet)
+  /// - rentPaidDue → electricity + water + other (rent already collected)
+  /// - unpaid / unpaidPending → full totalAmount
+  double get remainingAmount {
+    switch (paymentStatus) {
+      case RentalPaymentStatus.fullyPaid:
+        return 0;
+      case RentalPaymentStatus.rentPaidPending:
+        return 0;
+      case RentalPaymentStatus.rentPaidDue:
+        return electricityAmount + waterAmount + otherFees;
+      case RentalPaymentStatus.unpaid:
+      case RentalPaymentStatus.unpaidPending:
+        return totalAmount;
+    }
+  }
 
   /// Period display string (e.g., "Tháng 01/2026")
   String get periodDisplay => 'Tháng ${month.toString().padLeft(2, '0')}/$year';
@@ -78,11 +156,18 @@ class RentalInvoice {
     double otherFees = 0,
     String? otherFeesNote,
     String? notes,
+    bool isPendingMeter = false,
   }) {
     final now = DateTime.now();
-    final electricityAmount = (electricityNew - electricityOld) * electricityRate;
-    final waterAmount = (waterNew - waterOld) * waterRate;
-    final totalAmount = rentAmount + electricityAmount + waterAmount + otherFees;
+    // Khi chưa chốt số (isPendingMeter), electricityNew/waterNew là placeholder (0 hoặc bằng old).
+    // Tính âm sẽ làm sai totalAmount → clamp về 0, chỉ tính tiền nhà + phí khác.
+    final electricityAmount =
+        (electricityNew - electricityOld).clamp(0, double.infinity) *
+        electricityRate;
+    final waterAmount =
+        (waterNew - waterOld).clamp(0, double.infinity) * waterRate;
+    final totalAmount =
+        rentAmount + electricityAmount + waterAmount + otherFees;
 
     return RentalInvoice(
       id: const Uuid().v4(),
@@ -101,6 +186,7 @@ class RentalInvoice {
       otherFees: otherFees,
       otherFeesNote: otherFeesNote,
       totalAmount: totalAmount,
+      isPendingMeter: isPendingMeter,
       notes: notes,
       createdAt: now,
       updatedAt: now,
@@ -117,7 +203,8 @@ class RentalInvoice {
       electricityOld: (map[DbConstants.colElectricityOld] as num).toDouble(),
       electricityNew: (map[DbConstants.colElectricityNew] as num).toDouble(),
       electricityRate: (map[DbConstants.colElectricityRate] as num).toDouble(),
-      electricityAmount: (map[DbConstants.colElectricityAmount] as num).toDouble(),
+      electricityAmount: (map[DbConstants.colElectricityAmount] as num)
+          .toDouble(),
       waterOld: (map[DbConstants.colWaterOld] as num).toDouble(),
       waterNew: (map[DbConstants.colWaterNew] as num).toDouble(),
       waterRate: (map[DbConstants.colWaterRate] as num).toDouble(),
@@ -126,9 +213,26 @@ class RentalInvoice {
       otherFeesNote: map[DbConstants.colOtherFeesNote] as String?,
       totalAmount: (map[DbConstants.colTotalAmount] as num).toDouble(),
       isPaid: (map[DbConstants.colIsPaid] as int?) == 1,
+      paidAt: map[DbConstants.colPaidAt] != null
+          ? AppDateUtils.parseDbDateTime(map[DbConstants.colPaidAt] as String)
+          : null,
+      rentPaidAt: map[DbConstants.colRentPaidAt] != null
+          ? AppDateUtils.parseDbDateTime(
+              map[DbConstants.colRentPaidAt] as String,
+            )
+          : null,
+      isPendingMeter: (map[DbConstants.colIsPendingMeter] as int? ?? 0) == 1,
       notes: map[DbConstants.colNotes] as String?,
-      createdAt: AppDateUtils.parseDbDateTime(map[DbConstants.colCreatedAt] as String) ?? DateTime.now(),
-      updatedAt: AppDateUtils.parseDbDateTime(map[DbConstants.colUpdatedAt] as String) ?? DateTime.now(),
+      createdAt:
+          AppDateUtils.parseDbDateTime(
+            map[DbConstants.colCreatedAt] as String,
+          ) ??
+          DateTime.now(),
+      updatedAt:
+          AppDateUtils.parseDbDateTime(
+            map[DbConstants.colUpdatedAt] as String,
+          ) ??
+          DateTime.now(),
       tenantName: map['tenant_name'] as String?,
       tenantRoom: map['tenant_room'] as String?,
     );
@@ -153,6 +257,13 @@ class RentalInvoice {
       DbConstants.colOtherFeesNote: otherFeesNote,
       DbConstants.colTotalAmount: totalAmount,
       DbConstants.colIsPaid: isPaid ? 1 : 0,
+      DbConstants.colPaidAt: paidAt != null
+          ? AppDateUtils.toDbDateTime(paidAt!)
+          : null,
+      DbConstants.colRentPaidAt: rentPaidAt != null
+          ? AppDateUtils.toDbDateTime(rentPaidAt!)
+          : null,
+      DbConstants.colIsPendingMeter: isPendingMeter ? 1 : 0,
       DbConstants.colNotes: notes,
       DbConstants.colCreatedAt: AppDateUtils.toDbDateTime(createdAt),
       DbConstants.colUpdatedAt: AppDateUtils.toDbDateTime(updatedAt),
@@ -177,6 +288,11 @@ class RentalInvoice {
     String? otherFeesNote,
     double? totalAmount,
     bool? isPaid,
+    DateTime? paidAt,
+    bool clearPaidAt = false,
+    DateTime? rentPaidAt,
+    bool clearRentPaidAt = false,
+    bool? isPendingMeter,
     String? notes,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -201,6 +317,9 @@ class RentalInvoice {
       otherFeesNote: otherFeesNote ?? this.otherFeesNote,
       totalAmount: totalAmount ?? this.totalAmount,
       isPaid: isPaid ?? this.isPaid,
+      paidAt: clearPaidAt ? null : (paidAt ?? this.paidAt),
+      rentPaidAt: clearRentPaidAt ? null : (rentPaidAt ?? this.rentPaidAt),
+      isPendingMeter: isPendingMeter ?? this.isPendingMeter,
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),

@@ -18,10 +18,15 @@ class RestaurantDetailScreen extends StatefulWidget {
   final String restaurantId;
   final String restaurantName;
 
+  /// When true, automatically opens the Add Order dialog after loading.
+  /// Used by voice commands to complete the full action chain.
+  final bool autoOpenOrder;
+
   const RestaurantDetailScreen({
     super.key,
     required this.restaurantId,
     required this.restaurantName,
+    this.autoOpenOrder = false,
   });
 
   @override
@@ -41,9 +46,15 @@ class _RestaurantDetailScreenState extends State<RestaurantDetailScreen> {
     _selectedDate = DateTime.now();
     
     // Load products for order creation
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       context.read<ProductProvider>().loadProducts();
-      _loadOrders();
+      await _loadOrders();
+
+      // Voice command: auto-open order dialog after data is loaded
+      if (widget.autoOpenOrder && mounted) {
+        _showAddOrderDialog();
+      }
     });
   }
 
@@ -196,7 +207,8 @@ class _RestaurantDetailScreenState extends State<RestaurantDetailScreen> {
         title: const Text('Xác nhận xóa'),
         content: Text(
           'Xóa khách hàng "${widget.restaurantName}"?\n\n'
-          'Tất cả đơn hàng, công nợ và lịch sử liên quan sẽ bị xóa vĩnh viễn. '
+          '• Đơn chưa giao sẽ được trừ tồn kho\n'
+          '• Tất cả đơn hàng, công nợ và lịch sử sẽ bị xóa vĩnh viễn\n\n'
           'Hành động này không thể hoàn tác.',
           style: const TextStyle(height: 1.5),
         ),
@@ -456,6 +468,7 @@ class _RestaurantDetailScreenState extends State<RestaurantDetailScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_restaurant_add_order',
         onPressed: () => _showAddOrderDialog(),
         icon: const Icon(Icons.add),
         label: const Text('Thêm đơn'),

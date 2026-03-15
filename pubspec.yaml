@@ -41,6 +41,8 @@ dependencies:
   googleapis: ^13.2.0
   googleapis_auth: ^1.6.0
   http: ^1.2.0
+  speech_to_text: ^7.3.0
+  flutter_tts: ^4.2.5
 
 dev_dependencies:
   flutter_test:

@@ -362,12 +362,17 @@ class _CreateOrderDialogState extends State<CreateOrderDialog> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  Text(
-                                    formatCurrency(_totalAmount.round()),
-                                    style: const TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.primary,
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      formatCurrency(_totalAmount.round()),
+                                      textAlign: TextAlign.end,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
                                     ),
                                   ),
                                 ],

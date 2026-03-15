@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Temp SQLite database files
+*.db
+!lib/**/*.db
+
+# Windows reserved device names (cannot be tracked by Git)
+/nul

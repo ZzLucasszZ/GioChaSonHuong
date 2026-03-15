@@ -6,11 +6,13 @@ import '../../providers/restaurant_provider.dart';
 import '../debt/debt_screen.dart';
 import '../settings/backup_screen.dart';
 import '../settings/help_screen.dart';
+import '../shared/wake_toggle_button.dart';
 import 'restaurant_detail_screen.dart';
 
 /// Home screen - Restaurant list with create form
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String? initialSearchQuery;
+  const HomeScreen({super.key, this.initialSearchQuery});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -25,10 +27,25 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialSearchQuery != null && widget.initialSearchQuery!.isNotEmpty) {
+      _searchController.text = widget.initialSearchQuery!;
+      _searchQuery = widget.initialSearchQuery!;
+    }
     // Load restaurants on init
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RestaurantProvider>().loadRestaurants();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialSearchQuery != null &&
+        widget.initialSearchQuery != oldWidget.initialSearchQuery &&
+        widget.initialSearchQuery!.isNotEmpty) {
+      _searchController.text = widget.initialSearchQuery!;
+      setState(() => _searchQuery = widget.initialSearchQuery!);
+    }
   }
 
   @override
@@ -84,6 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Quản lý đơn hàng'),
         centerTitle: true,
         actions: [
+          const WakeToggleButton(),
           IconButton(
             icon: const Icon(Icons.help_outline),
             tooltip: 'Hướng dẫn sử dụng',

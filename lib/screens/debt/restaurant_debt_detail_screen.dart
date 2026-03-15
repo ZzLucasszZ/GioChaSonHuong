@@ -119,6 +119,7 @@ class _RestaurantDebtDetailScreenState
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab_debt_detail_add',
         onPressed: _showFabOptions,
         backgroundColor: AppColors.error,
         child: const Icon(Icons.add, color: Colors.white),
@@ -949,9 +950,20 @@ class _RestaurantDebtDetailScreenState
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Còn nợ:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                            Text(currency.formatCurrency(_actualRemaining.round()),
-                                style: TextStyle(fontSize: 13, color: AppColors.error, fontWeight: FontWeight.bold)),
+                            const Flexible(
+                              child: Text('Còn nợ:',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                currency.formatCurrency(_actualRemaining.round()),
+                                textAlign: TextAlign.end,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 13, color: AppColors.error, fontWeight: FontWeight.bold),
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -1303,15 +1315,18 @@ class _RestaurantDebtDetailScreenState
     final sortedOrders = List<Order>.from(orders)
       ..sort((a, b) => a.deliveryDate.compareTo(b.deliveryDate));
 
-    // Show original order amounts (totalAmount)
-    final lines = <Map<String, String>>[];
+    // Group orders by date and sum totals
+    final dailyTotals = <String, double>{};
     double totalOriginal = 0;
     for (final order in sortedOrders) {
       final dateKey = DateFormat('dd/MM').format(order.deliveryDate);
-      final amountStr = currency.formatCurrency(order.totalAmount.round());
-      lines.add({'date': dateKey, 'amount': amountStr});
+      dailyTotals[dateKey] = (dailyTotals[dateKey] ?? 0) + order.totalAmount;
       totalOriginal += order.totalAmount;
     }
+
+    final lines = dailyTotals.entries
+        .map((e) => {'date': e.key, 'amount': currency.formatCurrency(e.value.round())})
+        .toList();
 
     int maxLen = 0;
     for (final line in lines) {

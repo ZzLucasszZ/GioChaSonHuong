@@ -759,12 +759,17 @@ class _AddOrderDialogState extends State<AddOrderDialog> {
                             ),
                           ],
                         ),
-                        Text(
-                          formatCurrency(_totalAmount),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 24,
-                            color: AppColors.primary,
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            formatCurrency(_totalAmount),
+                            textAlign: TextAlign.end,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 24,
+                              color: AppColors.primary,
+                            ),
                           ),
                         ),
                       ],

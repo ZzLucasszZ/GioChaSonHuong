@@ -15,6 +15,7 @@ import '../../providers/restaurant_provider.dart';
 import '../home/order_detail_screen.dart';
 import '../shared/share_preview_dialog.dart';
 import 'restaurant_debt_detail_screen.dart';
+import '../shared/wake_toggle_button.dart';
 
 // Helper để lấy màu PaymentStatus
 Color _getPaymentColor(PaymentStatus status) {
@@ -29,7 +30,8 @@ Color _getPaymentColor(PaymentStatus status) {
 }
 
 class DebtTab extends StatefulWidget {
-  const DebtTab({super.key});
+  final String? initialSearchQuery;
+  const DebtTab({super.key, this.initialSearchQuery});
 
   @override
   State<DebtTab> createState() => _DebtTabState();
@@ -52,9 +54,24 @@ class _DebtTabState extends State<DebtTab> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialSearchQuery != null && widget.initialSearchQuery!.isNotEmpty) {
+      _searchController.text = widget.initialSearchQuery!;
+      _searchQuery = widget.initialSearchQuery!;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       loadUnpaidOrders();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant DebtTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialSearchQuery != null &&
+        widget.initialSearchQuery != oldWidget.initialSearchQuery &&
+        widget.initialSearchQuery!.isNotEmpty) {
+      _searchController.text = widget.initialSearchQuery!;
+      setState(() => _searchQuery = widget.initialSearchQuery!);
+    }
   }
 
   @override
@@ -121,6 +138,7 @@ class _DebtTabState extends State<DebtTab> {
       appBar: AppBar(
         title: const Text('Công nợ'),
         actions: [
+          const WakeToggleButton(),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: loadUnpaidOrders,
@@ -128,6 +146,7 @@ class _DebtTabState extends State<DebtTab> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab_debt_add',
         onPressed: _showFabOptions,
         backgroundColor: AppColors.error,
         child: const Icon(Icons.add, color: Colors.white),
@@ -294,7 +313,7 @@ class _DebtTabState extends State<DebtTab> {
                           }
 
                           return ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80),
                             itemCount: restaurantNames.length,
                             itemBuilder: (context, index) {
                               final restaurantName = restaurantNames[index];
@@ -917,9 +936,22 @@ class _DebtTabState extends State<DebtTab> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Tổng nợ (${ordersForRestaurant.length} đơn):', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                          Text(currency.formatCurrency(restaurantDebt.round()),
-                              style: TextStyle(fontSize: 13, color: AppColors.error, fontWeight: FontWeight.bold)),
+                          Flexible(
+                            child: Text(
+                              'Tổng nợ (${ordersForRestaurant.length} đơn):',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              currency.formatCurrency(restaurantDebt.round()),
+                              textAlign: TextAlign.end,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 13, color: AppColors.error, fontWeight: FontWeight.bold),
+                            ),
+                          ),
                         ],
                       ),
                     ),

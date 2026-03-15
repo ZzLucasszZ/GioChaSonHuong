@@ -431,7 +431,7 @@ class _OrderTabState extends State<OrderTab> {
                       final afternoonOrders = orders.where((o) => o.session == OrderSession.afternoon).toList();
 
                       return ListView(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 80),
                         children: [
                           if (morningOrders.isNotEmpty) ...[
                             _buildSessionHeader('🌅 Sáng', morningOrders.length),
@@ -452,6 +452,7 @@ class _OrderTabState extends State<OrderTab> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_order_create',
         onPressed: _showCreateOrderDialog,
         icon: const Icon(Icons.add),
         label: const Text('Tạo đơn'),

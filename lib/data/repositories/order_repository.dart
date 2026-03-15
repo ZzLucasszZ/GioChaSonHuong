@@ -499,6 +499,45 @@ class OrderRepository extends BaseRepository<Order> {
     return (result.first['total_debt'] as num?)?.toDouble() ?? 0;
   }
 
+  /// Get detailed breakdown of ordered quantities for a specific product.
+  /// Returns list of maps with: restaurant_name, order_id, delivery_date, session, quantity, status.
+  /// Only includes pending/confirmed/delivering orders.
+  Future<List<Map<String, dynamic>>> getOrderedQuantityBreakdown(
+    String productId, {
+    DateTime? untilDate,
+  }) async {
+    final db = await database;
+
+    String whereClause =
+        "o.${DbConstants.colStatus} NOT IN ('delivered', 'cancelled')"
+        " AND oi.${DbConstants.colProductId} = ?";
+    List<dynamic> whereArgs = [productId];
+
+    if (untilDate != null) {
+      whereClause += " AND o.${DbConstants.colDeliveryDate} <= ?";
+      whereArgs.add(AppDateUtils.toDbDate(untilDate));
+    }
+
+    final result = await db.rawQuery('''
+      SELECT
+        r.${DbConstants.colName}   AS restaurant_name,
+        o.${DbConstants.colId}     AS order_id,
+        o.${DbConstants.colDeliveryDate} AS delivery_date,
+        o.${DbConstants.colSession}      AS session,
+        o.${DbConstants.colStatus}       AS status,
+        oi.${DbConstants.colQuantity}    AS quantity
+      FROM ${DbConstants.tableOrderItems} oi
+      INNER JOIN ${DbConstants.tableOrders} o
+        ON oi.${DbConstants.colOrderId} = o.${DbConstants.colId}
+      INNER JOIN ${DbConstants.tableRestaurants} r
+        ON o.${DbConstants.colRestaurantId} = r.${DbConstants.colId}
+      WHERE $whereClause
+      ORDER BY o.${DbConstants.colDeliveryDate} ASC, r.${DbConstants.colName} ASC
+    ''', whereArgs);
+
+    return result;
+  }
+
   /// Get total ordered quantity for each product (only pending/confirmed/delivering orders)
   Future<Map<String, double>> getTotalOrderedQuantities({DateTime? untilDate}) async {
     final db = await database;

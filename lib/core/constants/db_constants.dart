@@ -4,7 +4,7 @@ class DbConstants {
 
   // Database info
   static const String databaseName = 'order_inventory.db';
-  static const int databaseVersion = 6;
+  static const int databaseVersion = 11;
 
   // Table names
   static const String tableRestaurants = 'restaurants';
@@ -85,6 +85,8 @@ class DbConstants {
   static const String colElectricityRate = 'electricity_rate';
   static const String colWaterRate = 'water_rate';
   static const String colMoveInDate = 'move_in_date';
+  static const String colDepositAmount = 'deposit_amount';
+  static const String colIsDepositPaid = 'is_deposit_paid';
 
   // Rental invoices columns
   static const String colTenantId = 'tenant_id';
@@ -101,4 +103,7 @@ class DbConstants {
   static const String colOtherFeesNote = 'other_fees_note';
   // colTotalAmount reused from orders
   static const String colIsPaid = 'is_paid';
+  static const String colPaidAt = 'paid_at';
+  static const String colRentPaidAt = 'rent_paid_at';
+  static const String colIsPendingMeter = 'is_pending_meter';
 }

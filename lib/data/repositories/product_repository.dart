@@ -16,6 +16,43 @@ class ProductRepository extends BaseRepository<Product> {
   @override
   Product fromMap(Map<String, dynamic> map) => Product.fromMap(map);
 
+  /// Get active products visible in inventory tab
+  Future<List<Product>> getInventoryProducts({
+    String? category,
+    String? orderBy,
+  }) async {
+    final db = await database;
+    String where = '${DbConstants.colIsActive} = ? AND ${DbConstants.colShowInInventory} = ?';
+    List<Object> whereArgs = [1, 1];
+
+    if (category != null && category.isNotEmpty) {
+      where += ' AND ${DbConstants.colCategory} = ?';
+      whereArgs.add(category);
+    }
+
+    final result = await db.query(
+      tableName,
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: orderBy ?? '${DbConstants.colName} ASC',
+    );
+    return result.map(fromMap).toList();
+  }
+
+  /// Toggle show_in_inventory flag
+  Future<int> toggleInventoryVisibility(String id, bool show) async {
+    final db = await database;
+    return await db.update(
+      tableName,
+      {
+        DbConstants.colShowInInventory: show ? 1 : 0,
+        DbConstants.colUpdatedAt: DateTime.now().toIso8601String(),
+      },
+      where: '${DbConstants.colId} = ?',
+      whereArgs: [id],
+    );
+  }
+
   /// Get all active products
   Future<List<Product>> getActiveProducts({
     String? category,
@@ -241,5 +278,41 @@ class ProductRepository extends BaseRepository<Product> {
     ''', [restaurantId]);
     
     return result;
+  }
+
+  /// Delete product and all related data (inventory_transactions, order_items, restaurant_prices)
+  /// Order totals are preserved (total_amount on order row); only line-item details are removed.
+  Future<void> deleteWithAllData(String productId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // 1. Delete inventory transactions for this product
+      await txn.delete(
+        DbConstants.tableInventoryTransactions,
+        where: '${DbConstants.colProductId} = ?',
+        whereArgs: [productId],
+      );
+
+      // 2. Delete order items referencing this product
+      //    (order.total_amount is preserved on the order row)
+      await txn.delete(
+        DbConstants.tableOrderItems,
+        where: '${DbConstants.colProductId} = ?',
+        whereArgs: [productId],
+      );
+
+      // 3. Delete restaurant prices (cascades via FK, but be explicit)
+      await txn.delete(
+        DbConstants.tableRestaurantPrices,
+        where: '${DbConstants.colProductId} = ?',
+        whereArgs: [productId],
+      );
+
+      // 4. Delete the product
+      await txn.delete(
+        DbConstants.tableProducts,
+        where: '${DbConstants.colId} = ?',
+        whereArgs: [productId],
+      );
+    });
   }
 }

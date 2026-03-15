@@ -81,10 +81,18 @@ class DatabaseHelper {
         )
       ''');
       // Create indexes for payments table
-      await db.execute('CREATE INDEX IF NOT EXISTS idx_payments_restaurant ON ${DbConstants.tablePayments}(${DbConstants.colRestaurantId})');
-      await db.execute('CREATE INDEX IF NOT EXISTS idx_payments_order ON ${DbConstants.tablePayments}(${DbConstants.colOrderId})');
-      await db.execute('CREATE INDEX IF NOT EXISTS idx_payments_date ON ${DbConstants.tablePayments}(${DbConstants.colPaymentDate})');
-      await db.execute('CREATE INDEX IF NOT EXISTS idx_payments_created ON ${DbConstants.tablePayments}(${DbConstants.colCreatedAt})');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_payments_restaurant ON ${DbConstants.tablePayments}(${DbConstants.colRestaurantId})',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_payments_order ON ${DbConstants.tablePayments}(${DbConstants.colOrderId})',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_payments_date ON ${DbConstants.tablePayments}(${DbConstants.colPaymentDate})',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_payments_created ON ${DbConstants.tablePayments}(${DbConstants.colCreatedAt})',
+      );
     }
 
     if (oldVersion < 3) {
@@ -94,7 +102,8 @@ class DatabaseHelper {
       // "Bổ sung bản ghi" to add reconciliation records (order_id IS NULL).
       // This caused double-counting: paidAmount on orders + payment records.
       // Fix: Reset paidAmount for partial orders that have no linked payment record.
-      final affected = await db.rawUpdate('''
+      final affected = await db.rawUpdate(
+        '''
         UPDATE ${DbConstants.tableOrders}
         SET ${DbConstants.colPaidAmount} = 0,
             ${DbConstants.colPaymentStatus} = 'unpaid',
@@ -106,10 +115,14 @@ class DatabaseHelper {
             FROM ${DbConstants.tablePayments}
             WHERE ${DbConstants.colOrderId} IS NOT NULL
           )
-      ''', [DateTime.now().toIso8601String()]);
+      ''',
+        [DateTime.now().toIso8601String()],
+      );
       if (affected > 0) {
         // ignore: avoid_print
-        print('V3 migration: Reset paidAmount on $affected orders with no linked payment records');
+        print(
+          'V3 migration: Reset paidAmount on $affected orders with no linked payment records',
+        );
       }
     }
 
@@ -130,8 +143,55 @@ class DatabaseHelper {
       // V6: Add rental management tables (tenants + rental_invoices)
       await db.execute(MigrationV1.createTenantsTable);
       await db.execute(MigrationV1.createRentalInvoicesTable);
-      await db.execute('CREATE INDEX IF NOT EXISTS idx_rental_invoices_tenant ON ${DbConstants.tableRentalInvoices}(${DbConstants.colTenantId})');
-      await db.execute('CREATE INDEX IF NOT EXISTS idx_rental_invoices_month ON ${DbConstants.tableRentalInvoices}(${DbConstants.colYear}, ${DbConstants.colMonth})');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_rental_invoices_tenant ON ${DbConstants.tableRentalInvoices}(${DbConstants.colTenantId})',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_rental_invoices_month ON ${DbConstants.tableRentalInvoices}(${DbConstants.colYear}, ${DbConstants.colMonth})',
+      );
+    }
+
+    if (oldVersion < 7) {
+      // V7: Add deposit_amount column to tenants table
+      await db.execute('''
+        ALTER TABLE ${DbConstants.tableTenants}
+        ADD COLUMN ${DbConstants.colDepositAmount} REAL NOT NULL DEFAULT 0
+      ''');
+    }
+
+    if (oldVersion < 8) {
+      // V8: Add paid_at column to rental_invoices
+      await db.execute('''
+        ALTER TABLE ${DbConstants.tableRentalInvoices}
+        ADD COLUMN ${DbConstants.colPaidAt} TEXT
+      ''');
+    }
+
+    if (oldVersion < 9) {
+      // V9: Add rent_paid_at — tracks when the rent portion was collected in advance.
+      // Enables the "collect rent now, collect electricity/water later" workflow.
+      await db.execute('''
+        ALTER TABLE ${DbConstants.tableRentalInvoices}
+        ADD COLUMN ${DbConstants.colRentPaidAt} TEXT
+      ''');
+    }
+
+    if (oldVersion < 10) {
+      // V10: Add is_pending_meter — marks advance invoices where meter readings
+      // have not yet been entered (elecOld==elecNew is a placeholder, not real 0 usage).
+      await db.execute('''
+        ALTER TABLE ${DbConstants.tableRentalInvoices}
+        ADD COLUMN ${DbConstants.colIsPendingMeter} INTEGER NOT NULL DEFAULT 0
+      ''');
+    }
+
+    if (oldVersion < 11) {
+      // V11: Add is_deposit_paid — tracks whether deposit has been collected.
+      // Default 0 (chưa thu) to avoid incorrectly marking old tenants as paid.
+      await db.execute('''
+        ALTER TABLE ${DbConstants.tableTenants}
+        ADD COLUMN ${DbConstants.colIsDepositPaid} INTEGER NOT NULL DEFAULT 0
+      ''');
     }
   }
 
@@ -151,69 +211,97 @@ class DatabaseHelper {
     if (paidOrders.isEmpty) return;
 
     // ignore: avoid_print
-    print('V4 migration: Found \${paidOrders.length} paid but undelivered orders');
+    print(
+      'V4 migration: Found \${paidOrders.length} paid but undelivered orders',
+    );
 
     for (final row in paidOrders) {
       final orderId = row[DbConstants.colId] as String;
 
       // 2. Mark order as delivered
-      await db.rawUpdate('''
+      await db.rawUpdate(
+        '''
         UPDATE ${DbConstants.tableOrders}
         SET ${DbConstants.colStatus} = 'delivered',
             ${DbConstants.colUpdatedAt} = ?
         WHERE ${DbConstants.colId} = ?
-      ''', [now, orderId]);
+      ''',
+        [now, orderId],
+      );
 
       // 3. Deduct stock for each order item
-      final items = await db.rawQuery('''
+      final items = await db.rawQuery(
+        '''
         SELECT ${DbConstants.colProductId}, ${DbConstants.colQuantity}, ${DbConstants.colProductName}
         FROM ${DbConstants.tableOrderItems}
         WHERE ${DbConstants.colOrderId} = ?
-      ''', [orderId]);
+      ''',
+        [orderId],
+      );
 
       for (final item in items) {
         final productId = item[DbConstants.colProductId] as String;
         final qty = (item[DbConstants.colQuantity] as num).toDouble();
-        final productName = item[DbConstants.colProductName] as String? ?? productId;
+        final productName =
+            item[DbConstants.colProductName] as String? ?? productId;
 
         // Get current stock
-        final stockResult = await db.rawQuery('''
+        final stockResult = await db.rawQuery(
+          '''
           SELECT ${DbConstants.colCurrentStock}
           FROM ${DbConstants.tableProducts}
           WHERE ${DbConstants.colId} = ?
-        ''', [productId]);
+        ''',
+          [productId],
+        );
 
         if (stockResult.isEmpty) continue; // product deleted — skip
 
-        final stockBefore = (stockResult.first[DbConstants.colCurrentStock] as num).toDouble();
+        final stockBefore =
+            (stockResult.first[DbConstants.colCurrentStock] as num).toDouble();
         final stockAfter = stockBefore - qty; // may go negative
 
         // Insert inventory transaction record
-        final txnId = '${orderId.substring(0, 8)}-v4-\${productId.substring(0, 8)}';
-        await db.rawInsert('''
+        final txnId =
+            '${orderId.substring(0, 8)}-v4-\${productId.substring(0, 8)}';
+        await db.rawInsert(
+          '''
           INSERT OR IGNORE INTO ${DbConstants.tableInventoryTransactions}
             (${DbConstants.colId}, ${DbConstants.colProductId}, ${DbConstants.colType},
              ${DbConstants.colQuantity}, ${DbConstants.colStockBefore}, ${DbConstants.colStockAfter},
              ${DbConstants.colReferenceType}, ${DbConstants.colReferenceId},
              ${DbConstants.colNotes}, ${DbConstants.colCreatedAt})
           VALUES (?, ?, 'stock_out', ?, ?, ?, 'order', ?, ?, ?)
-        ''', [
-          txnId, productId, qty, stockBefore, stockAfter,
-          orderId, 'V4 migration: trừ kho cho đơn đã thanh toán - $productName', now,
-        ]);
+        ''',
+          [
+            txnId,
+            productId,
+            qty,
+            stockBefore,
+            stockAfter,
+            orderId,
+            'V4 migration: trừ kho cho đơn đã thanh toán - $productName',
+            now,
+          ],
+        );
 
         // Update product stock
-        await db.rawUpdate('''
+        await db.rawUpdate(
+          '''
           UPDATE ${DbConstants.tableProducts}
           SET ${DbConstants.colCurrentStock} = ?,
               ${DbConstants.colUpdatedAt} = ?
           WHERE ${DbConstants.colId} = ?
-        ''', [stockAfter, now, productId]);
+        ''',
+          [stockAfter, now, productId],
+        );
       }
     }
 
     // ignore: avoid_print
-    print('V4 migration: Marked \${paidOrders.length} orders as delivered & deducted stock');
+    print(
+      'V4 migration: Marked \${paidOrders.length} orders as delivered & deducted stock',
+    );
   }
 
   /// Close database
@@ -251,12 +339,7 @@ class DatabaseHelper {
     List<Object?>? whereArgs,
   }) async {
     final db = await database;
-    return await db.update(
-      table,
-      data,
-      where: where,
-      whereArgs: whereArgs,
-    );
+    return await db.update(table, data, where: where, whereArgs: whereArgs);
   }
 
   /// Delete a record
@@ -266,11 +349,7 @@ class DatabaseHelper {
     List<Object?>? whereArgs,
   }) async {
     final db = await database;
-    return await db.delete(
-      table,
-      where: where,
-      whereArgs: whereArgs,
-    );
+    return await db.delete(table, where: where, whereArgs: whereArgs);
   }
 
   /// Query records
@@ -339,11 +418,7 @@ class DatabaseHelper {
     String? orderBy,
     int? limit,
   }) async {
-    return await query(
-      table,
-      orderBy: orderBy,
-      limit: limit,
-    );
+    return await query(table, orderBy: orderBy, limit: limit);
   }
 
   /// Count records in table

@@ -2,13 +2,18 @@ import 'package:flutter/foundation.dart';
 
 import '../core/utils/logger.dart';
 import '../data/database/database_helper.dart';
+import '../data/models/order.dart';
 import '../data/models/restaurant.dart';
+import '../data/repositories/inventory_repository.dart';
+import '../data/repositories/order_repository.dart';
 import '../data/repositories/restaurant_repository.dart';
 import '../services/google_drive_backup_service.dart';
 
 /// Provider for restaurant state management
 class RestaurantProvider extends ChangeNotifier {
   final RestaurantRepository _repository;
+  final OrderRepository _orderRepository;
+  final InventoryRepository _inventoryRepository;
   final GoogleDriveBackupService _gDriveBackup = GoogleDriveBackupService();
   
   List<Restaurant> _restaurants = [];
@@ -16,7 +21,9 @@ class RestaurantProvider extends ChangeNotifier {
   String? _error;
 
   RestaurantProvider(DatabaseHelper dbHelper)
-      : _repository = RestaurantRepository(dbHelper);
+      : _repository = RestaurantRepository(dbHelper),
+        _orderRepository = OrderRepository(dbHelper),
+        _inventoryRepository = InventoryRepository(dbHelper);
 
   void _triggerAutoBackup() {
     _gDriveBackup.autoBackup().catchError((e) {
@@ -114,16 +121,50 @@ class RestaurantProvider extends ChangeNotifier {
     }
   }
 
-  /// Delete restaurant
+  /// Delete restaurant with all related data.
+  /// Non-delivered orders have their stock deducted first,
+  /// then order_items, orders, and restaurant are cascade-deleted.
   Future<bool> deleteRestaurant(String id) async {
     try {
-      await _repository.delete(id);
+      // 1. Get all orders for this restaurant
+      final orders = await _orderRepository.getOrdersByRestaurant(id);
+
+      // 2. For NOT yet delivered orders → deduct stock
+      for (final order in orders) {
+        if (order.status == OrderStatus.delivered ||
+            order.status == OrderStatus.cancelled) {
+          continue;
+        }
+        final items = await _orderRepository.getOrderItems(order.id);
+        for (final item in items) {
+          try {
+            await _inventoryRepository.recordDeliveryStockOut(
+              productId: item.productId,
+              quantity: item.quantity,
+              referenceId: order.id,
+              notes: 'Trừ kho khi xóa khách hàng',
+            );
+          } catch (e) {
+            // Product may have been deleted — continue
+            AppLogger.warning(
+              'Skip stock deduct for ${item.productName}: $e',
+              tag: 'RestaurantProvider',
+            );
+          }
+        }
+      }
+
+      // 3. Cascade delete: order_items → orders → restaurant
+      await _repository.deleteWithAllData(id);
+
       _restaurants.removeWhere((r) => r.id == id);
       notifyListeners();
       _triggerAutoBackup();
+      AppLogger.success('Restaurant deleted with all data', tag: 'RestaurantProvider');
       return true;
     } catch (e) {
-      _error = 'Không thể xóa nhà hàng: $e';
+      _error = 'Không thể xóa khách hàng: $e';
+      AppLogger.error('Failed to delete restaurant', error: e, tag: 'RestaurantProvider');
       notifyListeners();
       return false;
     }

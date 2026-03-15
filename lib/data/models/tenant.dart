@@ -12,6 +12,8 @@ class Tenant {
   final double rentAmount;
   final double electricityRate;
   final double waterRate;
+  final double depositAmount;
+  final bool isDepositPaid;
   final DateTime? moveInDate;
   final String? notes;
   final bool isActive;
@@ -26,6 +28,8 @@ class Tenant {
     required this.rentAmount,
     required this.electricityRate,
     required this.waterRate,
+    this.depositAmount = 0,
+    this.isDepositPaid = false,
     this.moveInDate,
     this.notes,
     this.isActive = true,
@@ -40,6 +44,8 @@ class Tenant {
     required double rentAmount,
     required double electricityRate,
     required double waterRate,
+    double depositAmount = 0,
+    bool isDepositPaid = false,
     DateTime? moveInDate,
     String? notes,
   }) {
@@ -52,6 +58,8 @@ class Tenant {
       rentAmount: rentAmount,
       electricityRate: electricityRate,
       waterRate: waterRate,
+      depositAmount: depositAmount,
+      isDepositPaid: isDepositPaid,
       moveInDate: moveInDate,
       notes: notes,
       createdAt: now,
@@ -68,6 +76,8 @@ class Tenant {
       rentAmount: (map[DbConstants.colRentAmount] as num).toDouble(),
       electricityRate: (map[DbConstants.colElectricityRate] as num).toDouble(),
       waterRate: (map[DbConstants.colWaterRate] as num).toDouble(),
+      depositAmount: (map[DbConstants.colDepositAmount] as num?)?.toDouble() ?? 0,
+      isDepositPaid: (map[DbConstants.colIsDepositPaid] as int? ?? 0) == 1,
       moveInDate: map[DbConstants.colMoveInDate] != null
           ? AppDateUtils.parseDbDateTime(map[DbConstants.colMoveInDate] as String)
           : null,
@@ -87,6 +97,8 @@ class Tenant {
       DbConstants.colRentAmount: rentAmount,
       DbConstants.colElectricityRate: electricityRate,
       DbConstants.colWaterRate: waterRate,
+      DbConstants.colDepositAmount: depositAmount,
+      DbConstants.colIsDepositPaid: isDepositPaid ? 1 : 0,
       DbConstants.colMoveInDate: moveInDate != null ? AppDateUtils.toDbDateTime(moveInDate!) : null,
       DbConstants.colNotes: notes,
       DbConstants.colIsActive: isActive ? 1 : 0,
@@ -103,6 +115,8 @@ class Tenant {
     double? rentAmount,
     double? electricityRate,
     double? waterRate,
+    double? depositAmount,
+    bool? isDepositPaid,
     DateTime? moveInDate,
     String? notes,
     bool? isActive,
@@ -117,6 +131,8 @@ class Tenant {
       rentAmount: rentAmount ?? this.rentAmount,
       electricityRate: electricityRate ?? this.electricityRate,
       waterRate: waterRate ?? this.waterRate,
+      depositAmount: depositAmount ?? this.depositAmount,
+      isDepositPaid: isDepositPaid ?? this.isDepositPaid,
       moveInDate: moveInDate ?? this.moveInDate,
       notes: notes ?? this.notes,
       isActive: isActive ?? this.isActive,

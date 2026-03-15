@@ -9,6 +9,7 @@ import '../../providers/order_provider.dart';
 import '../../providers/restaurant_provider.dart';
 import '../home/order_detail_screen.dart';
 import '../shared/share_preview_dialog.dart';
+import '../shared/wake_toggle_button.dart';
 
 class DeliveryTab extends StatefulWidget {
   const DeliveryTab({super.key});
@@ -123,6 +124,7 @@ class _DeliveryTabState extends State<DeliveryTab> {
       appBar: AppBar(
         title: const Text('Giao hàng'),
         actions: [
+          const WakeToggleButton(),
           if (_allOrders.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.share),

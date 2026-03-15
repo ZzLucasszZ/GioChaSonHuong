@@ -4,14 +4,20 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/vietnamese_utils.dart';
+import '../../data/database/database_helper.dart';
 import '../../data/models/product.dart';
+import '../../data/repositories/order_repository.dart';
+import '../../data/repositories/product_repository.dart';
 import '../../providers/inventory_provider.dart';
 import '../../providers/product_provider.dart';
 import 'widgets/add_stock_dialog.dart';
+import 'widgets/ordered_breakdown_dialog.dart';
 import 'widgets/stock_history_screen.dart';
+import '../shared/wake_toggle_button.dart';
 
 class InventoryTab extends StatefulWidget {
-  const InventoryTab({super.key});
+  final String? initialSearchQuery;
+  const InventoryTab({super.key, this.initialSearchQuery});
 
   @override
   State<InventoryTab> createState() => _InventoryTabState();
@@ -26,9 +32,24 @@ class _InventoryTabState extends State<InventoryTab> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialSearchQuery != null && widget.initialSearchQuery!.isNotEmpty) {
+      _searchController.text = widget.initialSearchQuery!;
+      _searchQuery = widget.initialSearchQuery!;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       loadData();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant InventoryTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialSearchQuery != null &&
+        widget.initialSearchQuery != oldWidget.initialSearchQuery &&
+        widget.initialSearchQuery!.isNotEmpty) {
+      _searchController.text = widget.initialSearchQuery!;
+      setState(() => _searchQuery = widget.initialSearchQuery!);
+    }
   }
 
   @override
@@ -42,7 +63,7 @@ class _InventoryTabState extends State<InventoryTab> {
     setState(() {
       _isLoading = true;
     });
-    await context.read<ProductProvider>().loadProducts(untilDate: _selectedDate);
+    await context.read<ProductProvider>().loadInventoryProducts(untilDate: _selectedDate);
     await context.read<InventoryProvider>().loadInventories();
     if (mounted) {
       setState(() {
@@ -82,6 +103,12 @@ class _InventoryTabState extends State<InventoryTab> {
       appBar: AppBar(
         title: const Text('Tồn kho'),
         actions: [
+          const WakeToggleButton(),
+          IconButton(
+            icon: const Icon(Icons.visibility_off_outlined),
+            onPressed: _showHiddenProducts,
+            tooltip: 'Sản phẩm đã ẩn',
+          ),
           IconButton(
             icon: const Icon(Icons.history),
             onPressed: () {
@@ -245,7 +272,7 @@ class _InventoryTabState extends State<InventoryTab> {
                     }
 
                     return ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80),
                       itemCount: filteredProducts.length,
                       itemBuilder: (context, index) {
                         final product = filteredProducts[index];
@@ -272,6 +299,7 @@ class _InventoryTabState extends State<InventoryTab> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_inventory_stockin',
         onPressed: () {
           showDialog(
             context: context,
@@ -308,6 +336,7 @@ class _InventoryTabState extends State<InventoryTab> {
             ),
           );
         },
+        onLongPress: () => _showProductActions(product),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -371,7 +400,20 @@ class _InventoryTabState extends State<InventoryTab> {
                 children: [
                   _buildStockRow('Tồn kho:', currentStock, product.unit, AppColors.textPrimary),
                   const SizedBox(height: 2),
-                  _buildStockRow('Đã đặt:', orderedQty, product.unit, AppColors.info),
+                  GestureDetector(
+                    onTap: orderedQty > 0
+                        ? () => _showOrderedBreakdown(product, orderedQty)
+                        : null,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildStockRow('Đã đặt:', orderedQty, product.unit, AppColors.info),
+                        if (orderedQty > 0) ...[                          const SizedBox(width: 4),
+                          Icon(Icons.info_outline, size: 14, color: AppColors.info),
+                        ],
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 2),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -439,5 +481,148 @@ class _InventoryTabState extends State<InventoryTab> {
         ),
       ],
     );
+  }
+
+  Future<void> _showHiddenProducts() async {
+    final productRepo = ProductRepository(DatabaseHelper.instance);
+    final allActive = await productRepo.getActiveProducts();
+    final hidden = allActive.where((p) => !p.showInInventory).toList();
+
+    if (!mounted) return;
+
+    if (hidden.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không có sản phẩm nào đang ẩn')),
+      );
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sản phẩm đã ẩn'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: hidden.length,
+            itemBuilder: (context, index) {
+              final product = hidden[index];
+              return ListTile(
+                title: Text(product.name),
+                subtitle: Text('${product.unit} — ${product.currentStock.round()} ${product.unit}'),
+                trailing: TextButton.icon(
+                  onPressed: () async {
+                    final provider = this.context.read<ProductProvider>();
+                    await provider.toggleInventoryVisibility(product.id, true);
+                    Navigator.pop(ctx);
+                    await loadData();
+                    if (mounted) {
+                      ScaffoldMessenger.of(this.context).showSnackBar(
+                        SnackBar(
+                          content: Text('Đã hiện lại ${product.name}'),
+                          backgroundColor: AppColors.success,
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.visibility, size: 18),
+                  label: const Text('Hiện'),
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showOrderedBreakdown(Product product, int orderedQty) {
+    final orderRepo = OrderRepository(DatabaseHelper.instance);
+    showDialog(
+      context: context,
+      builder: (_) => OrderedBreakdownDialog(
+        product: product,
+        totalOrdered: orderedQty,
+        orderRepository: orderRepo,
+        untilDate: _selectedDate,
+      ),
+    );
+  }
+
+  void _showProductActions(Product product) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.visibility_off, color: AppColors.warning),
+              title: Text('Ẩn "${product.name}" khỏi tồn kho'),
+              subtitle: const Text('Sản phẩm vẫn còn trong tab Sản phẩm'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _confirmHideProduct(product);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmHideProduct(Product product) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ẩn khỏi tồn kho'),
+        content: Text(
+          'Ẩn "${product.name}" khỏi danh sách tồn kho?\n\n'
+          'Sản phẩm vẫn còn trong tab Sản phẩm và có thể hiện lại bất cứ lúc nào.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Ẩn'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final provider = context.read<ProductProvider>();
+      final success = await provider.toggleInventoryVisibility(product.id, false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success
+                ? 'Đã ẩn ${product.name} khỏi tồn kho'
+                : 'Không thể ẩn sản phẩm'),
+            backgroundColor: success ? AppColors.success : AppColors.error,
+            action: success
+                ? SnackBarAction(
+                    label: 'Hoàn tác',
+                    textColor: Colors.white,
+                    onPressed: () async {
+                      await provider.toggleInventoryVisibility(product.id, true);
+                      await loadData();
+                    },
+                  )
+                : null,
+          ),
+        );
+      }
+    }
   }
 }

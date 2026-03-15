@@ -36,6 +36,24 @@ class ProductProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
+  /// Load products visible in inventory tab
+  Future<void> loadInventoryProducts({String? category, DateTime? untilDate}) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      _products = await _repository.getInventoryProducts(category: category);
+      _orderedQuantities = await _orderRepository.getTotalOrderedQuantities(untilDate: untilDate);
+      _error = null;
+    } catch (e) {
+      _error = 'Không thể tải danh sách sản phẩm: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   /// Load all active products
   Future<void> loadProducts({String? category, DateTime? untilDate}) async {
     _isLoading = true;
@@ -122,10 +140,29 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
-  /// Delete product
+  /// Toggle product visibility in inventory tab (hide/show, not delete)
+  Future<bool> toggleInventoryVisibility(String id, bool show) async {
+    try {
+      await _repository.toggleInventoryVisibility(id, show);
+
+      if (!show) {
+        // Hide: remove from current list
+        _products.removeWhere((p) => p.id == id);
+      }
+      notifyListeners();
+      _triggerAutoBackup();
+      return true;
+    } catch (e) {
+      _error = 'Không thể cập nhật hiển thị sản phẩm: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Delete product and all related data
   Future<bool> deleteProduct(String id) async {
     try {
-      await _repository.delete(id);
+      await _repository.deleteWithAllData(id);
       _products.removeWhere((p) => p.id == id);
       notifyListeners();
       _triggerAutoBackup();
