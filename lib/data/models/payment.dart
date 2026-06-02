@@ -58,6 +58,7 @@ class Payment {
   final DateTime paymentDate;
   final String? notes;
   final DateTime createdAt;
+  final DateTime? debtSharedAt;
 
   // Joined data (for display)
   final String? restaurantName;
@@ -72,9 +73,12 @@ class Payment {
     required this.paymentDate,
     this.notes,
     required this.createdAt,
+    this.debtSharedAt,
     this.restaurantName,
     this.orderInfo,
   });
+
+  bool get isDebtShared => debtSharedAt != null;
 
   /// Create a new Payment with generated ID and timestamp
   factory Payment.create({
@@ -109,6 +113,9 @@ class Payment {
       paymentDate: AppDateUtils.parseDbDate(map[DbConstants.colPaymentDate]?.toString() ?? '') ?? DateTime.now(),
       notes: map[DbConstants.colNotes]?.toString(),
       createdAt: AppDateUtils.parseDbDateTime(map[DbConstants.colCreatedAt]?.toString() ?? '') ?? DateTime.now(),
+      debtSharedAt: map[DbConstants.colDebtSharedAt] != null
+          ? AppDateUtils.parseDbDateTime(map[DbConstants.colDebtSharedAt].toString())
+          : null,
       // Joined fields
       restaurantName: map['restaurant_name']?.toString(),
       orderInfo: map['order_info']?.toString(),
@@ -126,6 +133,7 @@ class Payment {
       DbConstants.colPaymentDate: AppDateUtils.toDbDate(paymentDate),
       DbConstants.colNotes: notes,
       DbConstants.colCreatedAt: AppDateUtils.toDbDateTime(createdAt),
+      DbConstants.colDebtSharedAt: debtSharedAt != null ? AppDateUtils.toDbDateTime(debtSharedAt!) : null,
     };
   }
 
@@ -151,6 +159,7 @@ class Payment {
       paymentDate: paymentDate ?? this.paymentDate,
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
+      debtSharedAt: debtSharedAt ?? this.debtSharedAt,
       restaurantName: restaurantName ?? this.restaurantName,
       orderInfo: orderInfo ?? this.orderInfo,
     );

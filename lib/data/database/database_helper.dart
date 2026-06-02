@@ -193,6 +193,32 @@ class DatabaseHelper {
         ADD COLUMN ${DbConstants.colIsDepositPaid} INTEGER NOT NULL DEFAULT 0
       ''');
     }
+
+    if (oldVersion < 13) {
+      // V13: Add debt_shared_at to payments — marks when a general payment was
+      // included in a smart share, so it gets folded into "nợ cũ" on next share.
+      await _addColumnIfNotExists(
+        db,
+        DbConstants.tablePayments,
+        DbConstants.colDebtSharedAt,
+        'TEXT',
+      );
+    }
+  }
+
+  /// Safely adds a column to a table only if it does not already exist.
+  /// SQLite does not support ALTER TABLE ... ADD COLUMN IF NOT EXISTS.
+  Future<void> _addColumnIfNotExists(
+    Database db,
+    String table,
+    String column,
+    String type,
+  ) async {
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    final exists = info.any((row) => row['name'] == column);
+    if (!exists) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $type');
+    }
   }
 
   /// V4: Retroactively mark fully-paid orders as delivered and deduct stock.

@@ -13,6 +13,8 @@ import '../../providers/order_provider.dart';
 import '../home/order_detail_screen.dart';
 import '../shared/share_preview_dialog.dart';
 
+enum _ShareMode { full, smart }
+
 class RestaurantDebtDetailScreen extends StatefulWidget {
   final String restaurantName;
   final String restaurantId;
@@ -36,6 +38,9 @@ class _RestaurantDebtDetailScreenState
   bool _isLoading = true;
   double _totalDebt = 0;
   double _totalPaidGeneral = 0; // Only reconciliation payments (order_id IS NULL)
+
+  // Smart-share UI state
+  bool _oldDebtExpanded = false;
 
   @override
   void initState() {
@@ -86,14 +91,52 @@ class _RestaurantDebtDetailScreenState
   /// All general/partial payments (not linked to specific orders)
   List<Payment> get _generalPayments => _payments.where((p) => p.orderId == null).toList();
 
+  /// General payments already folded into a previous smart share
+  List<Payment> get _sharedPayments => _generalPayments.where((p) => p.isDebtShared).toList();
+
+  /// General payments not yet included in any smart share
+  List<Payment> get _newPayments => _generalPayments.where((p) => !p.isDebtShared).toList();
+
+  double get _sharedPaymentsTotal => _sharedPayments.fold(0.0, (s, p) => s + p.amount);
+  double get _newPaymentsTotal => _newPayments.fold(0.0, (s, p) => s + p.amount);
+
+  /// Orders already included in a previous smart share
+  List<Order> get _sharedOrders => _orders.where((o) => o.isDebtShared).toList();
+
+  /// Orders not yet shared — appear as new debt
+  List<Order> get _newOrders => _orders.where((o) => !o.isDebtShared).toList();
+
+  /// Whether any orders have been smart-shared before
+  bool get _hasSmartShareHistory => _sharedOrders.isNotEmpty;
+
+  /// Raw sum of all shared orders' debt amounts
+  double get _sharedOrdersDebt => _sharedOrders.fold(0.0, (s, o) => s + o.debtAmount);
+
+  /// "Old debt" = shared orders after subtracting only shared payments (clamped >= 0)
+  double get _oldDebt {
+    final net = _sharedOrdersDebt - _sharedPaymentsTotal;
+    return net < 0 ? 0 : net;
+  }
+
+  /// New debt = sum of unshared orders only
+  double get _newDebt => _newOrders.fold(0.0, (s, o) => s + o.debtAmount);
+
+  /// Most recent share timestamp across all shared orders
+  DateTime? get _lastShareDate {
+    if (_sharedOrders.isEmpty) return null;
+    return _sharedOrders
+        .map((o) => o.debtSharedAt!)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
   bool _isManualDebt(Order order) {
     return order.items == null || order.items!.isEmpty;
   }
 
-  /// Group orders by date
-  Map<String, List<Order>> _groupByDate() {
+  /// Group a list of orders by date key (dd/MM/yyyy)
+  Map<String, List<Order>> _groupByDate(List<Order> orders) {
     final grouped = <String, List<Order>>{};
-    for (final order in _orders) {
+    for (final order in orders) {
       final key = DateFormat('dd/MM/yyyy').format(order.deliveryDate);
       grouped.putIfAbsent(key, () => []).add(order);
     }
@@ -102,19 +145,39 @@ class _RestaurantDebtDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    final ordersByDate = _groupByDate();
+    final newOrdersByDate = _groupByDate(_newOrders);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.restaurantName),
         actions: [
           if (_orders.isNotEmpty || _generalPayments.isNotEmpty)
-            IconButton(
+            PopupMenuButton<_ShareMode>(
               icon: const Icon(Icons.share),
               tooltip: 'Chia sẻ công nợ',
-              onPressed: () => _showSharePreview(
-                _buildDebtMessage(widget.restaurantName, _orders, _actualRemaining),
-              ),
+              onSelected: _onShareModeSelected,
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: _ShareMode.full,
+                  child: Row(
+                    children: [
+                      Icon(Icons.list_alt, size: 20),
+                      SizedBox(width: 10),
+                      Text('Share đầy đủ'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: _ShareMode.smart,
+                  child: Row(
+                    children: [
+                      Icon(Icons.auto_awesome, size: 20, color: Colors.deepPurple),
+                      SizedBox(width: 10),
+                      Text('Share thông minh', style: TextStyle(color: Colors.deepPurple)),
+                    ],
+                  ),
+                ),
+              ],
             ),
         ],
       ),
@@ -147,8 +210,14 @@ class _RestaurantDebtDetailScreenState
                   children: [
                     // Header card (only when there are orders)
                     if (_orders.isNotEmpty) _buildHeaderCard(),
-                    // Payment history section (only general/partial payments)
-                    if (_generalPayments.isNotEmpty)
+                    // Payment history: when smart-share history exists, only show NEW (unshared) payments
+                    if (_hasSmartShareHistory && _newPayments.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _buildPaymentHistorySection(payments: _newPayments, title: 'Thanh toán mới'),
+                      ),
+                    // Payment history: no share history yet, show all
+                    if (!_hasSmartShareHistory && _generalPayments.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: _buildPaymentHistorySection(),
@@ -170,9 +239,15 @@ class _RestaurantDebtDetailScreenState
                           ],
                         ),
                       ),
-                    // Orders grouped by date
-                    if (_orders.isNotEmpty)
-                      ...ordersByDate.entries.map((entry) {
+                    // ── Smart share: old-debt summary row ──────────────
+                    if (_hasSmartShareHistory)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _buildOldDebtSection(),
+                      ),
+                    // ── New / unshared orders grouped by date ──────────
+                    if (_newOrders.isNotEmpty) ...
+                      newOrdersByDate.entries.map((entry) {
                         final dateDebt = entry.value.fold(
                             0.0, (sum, o) => sum + o.debtAmount);
                         return Padding(
@@ -190,6 +265,154 @@ class _RestaurantDebtDetailScreenState
                   ],
                 ),
     );
+  }
+
+  // ─── Share mode handling ─────────────────────────────────────────────
+
+  void _onShareModeSelected(_ShareMode mode) {
+    if (mode == _ShareMode.full) {
+      _showSharePreview(_buildFullDebtMessage());
+    } else {
+      _showSmartSharePreview();
+    }
+  }
+
+  Future<void> _showSmartSharePreview() async {
+    final message = _buildSmartDebtMessage();
+    final confirmed = await SharePreviewDialog.showWithConfirm(
+      context,
+      message: message,
+      confirmLabel: 'Chia sẻ & Đánh dấu',
+    );
+    if (confirmed == true && mounted) {
+      final provider = context.read<OrderProvider>();
+      await provider.markOrdersAsShared(widget.restaurantId);
+      await _loadOrders();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Đã đánh dấu đã share'),
+            backgroundColor: Colors.deepPurple,
+          ),
+        );
+      }
+    }
+  }
+
+  // ─── Old-debt summary section ────────────────────────────────────────
+
+  Widget _buildOldDebtSection() {
+    final shareDate = _lastShareDate;
+    final shareDateStr = shareDate != null
+        ? DateFormat('dd/MM/yyyy').format(shareDate)
+        : '';
+    final count = _sharedOrders.length;
+    final paid = _sharedPaymentsTotal;
+    final gross = _sharedOrdersDebt;
+    final net = _oldDebt;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      color: Colors.grey.shade50,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          leading: const Icon(Icons.history, color: Colors.grey),
+          title: Text(
+            'Nợ cũ — $count đơn — còn: ${currency.formatCurrency(net.round())}',
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          ),
+          subtitle: shareDateStr.isNotEmpty
+              ? Text('Đã share ngày $shareDateStr',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary))
+              : null,
+          initiallyExpanded: _oldDebtExpanded,
+          onExpansionChanged: (v) => setState(() => _oldDebtExpanded = v),
+          children: [
+            if (paid > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_outline, size: 16, color: Colors.green),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Đã thanh toán: ${currency.formatCurrency(paid.round())}  '
+                        '(gốc: ${currency.formatCurrency(gross.round())})',
+                        style: const TextStyle(fontSize: 12, color: Colors.green),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const Divider(height: 1),
+            ..._sharedOrders.map((order) => _buildSharedOrderTile(order)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSharedOrderTile(Order order) {
+    final dateStr = DateFormat('dd/MM/yyyy').format(order.deliveryDate);
+    final isManual = _isManualDebt(order);
+    return ListTile(
+      dense: true,
+      leading: Icon(
+        isManual ? Icons.edit_note : Icons.receipt_outlined,
+        size: 18,
+        color: Colors.grey,
+      ),
+      title: Text(
+        isManual
+            ? (order.notes ?? 'Nợ cũ')
+            : '$dateStr — ${order.session?.displayName ?? ''}',
+        style: const TextStyle(fontSize: 13, color: Colors.grey),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            currency.formatCurrency(order.debtAmount.round()),
+            style: const TextStyle(color: Colors.grey, fontSize: 13),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.undo, size: 18, color: Colors.orange),
+            tooltip: 'Bỏ đánh dấu đã share',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: () => _confirmUnmarkShared(order),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmUnmarkShared(Order order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Bỏ đánh dấu đã share?'),
+        content: const Text(
+          'Đơn này sẽ được chuyển về "phát sinh mới" trong lần share tiếp theo.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Bỏ đánh dấu'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      final provider = context.read<OrderProvider>();
+      await provider.unmarkOrderShared(order.id);
+      await _loadOrders();
+    }
   }
 
   Widget _buildHeaderCard() {
@@ -267,25 +490,26 @@ class _RestaurantDebtDetailScreenState
     );
   }
 
-  Widget _buildPaymentHistorySection() {
-    final payments = _generalPayments;
+  Widget _buildPaymentHistorySection({List<Payment>? payments, String? title}) {
+    final pmts = payments ?? _generalPayments;
+    final total = pmts.fold(0.0, (s, p) => s + p.amount);
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
         leading: const Icon(Icons.receipt_long, color: Colors.green),
         title: Text(
-          'Lịch sử thanh toán (${payments.length})',
+          '${title ?? 'Lịch sử thanh toán'} (${pmts.length})',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
-          'Đã trả: ${currency.formatCurrency(_totalPaidGeneral.round())}',
+          'Đã trả: ${currency.formatCurrency(total.round())}',
           style: const TextStyle(color: Colors.green),
         ),
         initiallyExpanded: true,
         children: [
           const Divider(height: 1),
-          ...payments.map((payment) {
+          ...pmts.map((payment) {
             final dateStr =
                 DateFormat('dd/MM/yyyy').format(payment.paymentDate);
             return ListTile(
@@ -1306,64 +1530,103 @@ class _RestaurantDebtDetailScreenState
     );
   }
 
-  String _buildDebtMessage(
-      String restaurantName, List<Order> orders, double totalDebt) {
-    final buffer = StringBuffer();
-    buffer.writeln('📋 CÔNG NỢ: $restaurantName');
-    buffer.writeln('═══════════════════');
+  // ─── Share text builders ─────────────────────────────────────────────
 
-    final sortedOrders = List<Order>.from(orders)
+  /// "Share đầy đủ" — all orders, no marking, same as before.
+  String _buildFullDebtMessage() {
+    final buf = StringBuffer();
+    buf.writeln('📋 CÔNG NỢ: ${widget.restaurantName}');
+    buf.writeln('═══════════════════');
+
+    final sorted = List<Order>.from(_orders)
       ..sort((a, b) => a.deliveryDate.compareTo(b.deliveryDate));
 
-    // Group orders by date and sum totals
     final dailyTotals = <String, double>{};
-    double totalOriginal = 0;
-    for (final order in sortedOrders) {
-      final dateKey = DateFormat('dd/MM').format(order.deliveryDate);
-      dailyTotals[dateKey] = (dailyTotals[dateKey] ?? 0) + order.totalAmount;
-      totalOriginal += order.totalAmount;
+    double grossTotal = 0;
+    for (final o in sorted) {
+      final key = DateFormat('dd/MM').format(o.deliveryDate);
+      dailyTotals[key] = (dailyTotals[key] ?? 0) + o.totalAmount;
+      grossTotal += o.totalAmount;
     }
 
-    final lines = dailyTotals.entries
-        .map((e) => {'date': e.key, 'amount': currency.formatCurrency(e.value.round())})
-        .toList();
+    _writeAlignedDateLines(buf, dailyTotals);
+    buf.writeln('═══════════════════');
 
-    int maxLen = 0;
-    for (final line in lines) {
-      if (line['amount']!.length > maxLen) maxLen = line['amount']!.length;
-    }
-
-    for (final line in lines) {
-      final padded = line['amount']!.padLeft(maxLen);
-      buffer.writeln('${line['date']}:  $padded');
-    }
-
-    buffer.writeln('═══════════════════');
-
-    // Payment history section (only general/partial payments)
-    final generalPmts = _generalPayments;
-    if (generalPmts.isNotEmpty) {
-      buffer.writeln('💰 Tổng nợ: ${currency.formatCurrency(totalOriginal.round())}');
-      buffer.writeln('');
-      buffer.writeln('✅ ĐÃ THANH TOÁN:');
-      for (final payment in generalPmts) {
-        final dateStr =
-            DateFormat('dd/MM/yyyy').format(payment.paymentDate);
-        final amountStr =
-            currency.formatCurrency(payment.amount.round());
-        buffer.writeln('  $dateStr:  -$amountStr');
+    final pmts = _generalPayments;
+    if (pmts.isNotEmpty) {
+      buf.writeln('💰 Tổng nợ: ${currency.formatCurrency(grossTotal.round())}');
+      buf.writeln('');
+      buf.writeln('✅ ĐÃ THANH TOÁN:');
+      for (final p in pmts) {
+        buf.writeln('  ${DateFormat('dd/MM/yyyy').format(p.paymentDate)}:  -${currency.formatCurrency(p.amount.round())}');
       }
-      buffer.writeln('───────────────────');
-      buffer.writeln(
-          ' Còn nợ: ${currency.formatCurrency(totalDebt.round())}');
+      buf.writeln('───────────────────');
+      buf.writeln(' Còn nợ: ${currency.formatCurrency(_actualRemaining.round())}');
     } else {
-      buffer.writeln('💰 TỔNG: ${currency.formatCurrency(totalDebt.round())}');
+      buf.writeln('💰 TỔNG: ${currency.formatCurrency(_actualRemaining.round())}');
+    }
+    return buf.toString();
+  }
+
+  /// "Share thông minh" — cộng gộp nợ cũ sau trừ payments, liệt kê đơn mới.
+  String _buildSmartDebtMessage() {
+    // Lần đầu chưa share → format giống full
+    if (!_hasSmartShareHistory) return _buildFullDebtMessage();
+
+    final buf = StringBuffer();
+    buf.writeln('📋 CÔNG NỢ: ${widget.restaurantName}');
+
+    // ── Old debt block ──
+    final shareDate = _lastShareDate;
+    final shareDateStr = shareDate != null
+        ? DateFormat('dd/MM').format(shareDate)
+        : '';
+    final net = _oldDebt;
+
+    buf.writeln('Nợ cũ (chốt $shareDateStr):  ${currency.formatCurrency(net.round())}');
+
+    // ── New payments (unshared) ──
+    final newPmts = _newPayments;
+    if (newPmts.isNotEmpty) {
+      buf.writeln('─────────────');
+      buf.writeln('ĐÃ THANH TOÁN:');
+      for (final p in newPmts) {
+        buf.writeln('  ${DateFormat('dd/MM').format(p.paymentDate)}:  -${currency.formatCurrency(p.amount.round())}');
+      }
     }
 
-    return buffer.toString();
+    // ── New orders block ──
+    if (_newOrders.isNotEmpty) {
+      buf.writeln('─────────────');
+      buf.writeln('ĐƠN HÀNG:');
+      final sorted = List<Order>.from(_newOrders)
+        ..sort((a, b) => a.deliveryDate.compareTo(b.deliveryDate));
+      final dailyTotals = <String, double>{};
+      for (final o in sorted) {
+        final key = DateFormat('dd/MM').format(o.deliveryDate);
+        dailyTotals[key] = (dailyTotals[key] ?? 0) + o.totalAmount;
+      }
+      _writeAlignedDateLines(buf, dailyTotals);
+    }
+
+    buf.writeln('══════════════');
+    buf.writeln('💰 TỔNG CÒN NỢ:   ${currency.formatCurrency(_actualRemaining.round())}');
+    return buf.toString();
+  }
+
+  /// Write date → amount lines with right-aligned amounts into [buf].
+  void _writeAlignedDateLines(StringBuffer buf, Map<String, double> dailyTotals) {
+    final lines = dailyTotals.entries
+        .map((e) => MapEntry(e.key, currency.formatCurrency(e.value.round())))
+        .toList();
+    final maxLen = lines.fold(0, (m, e) => e.value.length > m ? e.value.length : m);
+    for (final e in lines) {
+      buf.writeln('${e.key}:  ${e.value.padLeft(maxLen)}');
+    }
   }
 
   void _showSharePreview(String message) {
     SharePreviewDialog.show(context, message: message);
   }
 }
+

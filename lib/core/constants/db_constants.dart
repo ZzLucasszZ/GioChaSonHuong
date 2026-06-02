@@ -4,7 +4,7 @@ class DbConstants {
 
   // Database info
   static const String databaseName = 'order_inventory.db';
-  static const int databaseVersion = 11;
+  static const int databaseVersion = 13;
 
   // Table names
   static const String tableRestaurants = 'restaurants';
@@ -49,6 +49,7 @@ class DbConstants {
 
   // Orders columns
   static const String colOrderDate = 'order_date';
+  static const String colDebtSharedAt = 'debt_shared_at';
   static const String colDeliveryDate = 'delivery_date';
   static const String colSession = 'session';
   static const String colStatus = 'status';

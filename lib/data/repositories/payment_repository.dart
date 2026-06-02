@@ -356,4 +356,21 @@ class PaymentRepository extends BaseRepository<Payment> {
     
     return result.map(fromMap).toList();
   }
+
+  /// Mark all unshared general payments for a restaurant as shared.
+  /// Returns the count of payments marked.
+  Future<int> markPaymentsAsShared(String restaurantId) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update(
+      tableName,
+      {DbConstants.colDebtSharedAt: now},
+      where: '''
+        ${DbConstants.colRestaurantId} = ?
+        AND ${DbConstants.colOrderId} IS NULL
+        AND ${DbConstants.colDebtSharedAt} IS NULL
+      ''',
+      whereArgs: [restaurantId],
+    );
+  }
 }

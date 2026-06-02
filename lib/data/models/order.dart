@@ -4,6 +4,9 @@ import '../../core/constants/db_constants.dart';
 import '../../core/utils/date_utils.dart';
 import 'order_item.dart';
 
+// Sentinel for nullable copyWith fields
+const _sentinel = Object();
+
 /// Order status enum
 enum OrderStatus {
   pending,
@@ -174,6 +177,7 @@ class Order {
   final String? notes;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final DateTime? debtSharedAt;
 
   // Joined data (for display)
   final String? restaurantName;
@@ -194,11 +198,15 @@ class Order {
     this.notes,
     required this.createdAt,
     required this.updatedAt,
+    this.debtSharedAt,
     this.restaurantName,
     this.restaurantPhone,
     this.restaurantAddress,
     this.items,
   });
+
+  /// Whether this order has been included in a smart share
+  bool get isDebtShared => debtSharedAt != null;
 
   /// Calculate debt amount (never negative)
   double get debtAmount {
@@ -264,6 +272,9 @@ class Order {
       notes: map[DbConstants.colNotes]?.toString(),
       createdAt: AppDateUtils.parseDbDateTime(map[DbConstants.colCreatedAt]?.toString() ?? '') ?? DateTime.now(),
       updatedAt: AppDateUtils.parseDbDateTime(map[DbConstants.colUpdatedAt]?.toString() ?? '') ?? DateTime.now(),
+      debtSharedAt: map[DbConstants.colDebtSharedAt] != null
+          ? AppDateUtils.parseDbDateTime(map[DbConstants.colDebtSharedAt].toString())
+          : null,
       // Joined fields
       restaurantName: map['restaurant_name']?.toString(),
       restaurantPhone: map['restaurant_phone']?.toString(),
@@ -286,6 +297,7 @@ class Order {
       DbConstants.colNotes: notes,
       DbConstants.colCreatedAt: AppDateUtils.toDbDateTime(createdAt),
       DbConstants.colUpdatedAt: AppDateUtils.toDbDateTime(updatedAt),
+      DbConstants.colDebtSharedAt: debtSharedAt != null ? AppDateUtils.toDbDateTime(debtSharedAt!) : null,
     };
   }
 
@@ -307,6 +319,7 @@ class Order {
     String? restaurantPhone,
     String? restaurantAddress,
     List<OrderItem>? items,
+    Object? debtSharedAt = _sentinel,
   }) {
     return Order(
       id: id ?? this.id,
@@ -321,6 +334,7 @@ class Order {
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
+      debtSharedAt: debtSharedAt == _sentinel ? this.debtSharedAt : debtSharedAt as DateTime?,
       restaurantName: restaurantName ?? this.restaurantName,
       restaurantPhone: restaurantPhone ?? this.restaurantPhone,
       restaurantAddress: restaurantAddress ?? this.restaurantAddress,

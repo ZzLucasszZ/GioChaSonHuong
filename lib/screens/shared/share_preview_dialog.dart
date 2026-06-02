@@ -27,6 +27,24 @@ class SharePreviewDialog extends StatelessWidget {
     );
   }
 
+  /// Show a share preview dialog with an explicit confirm button.
+  /// Returns [true] when the user taps [confirmLabel], [false/null] otherwise.
+  static Future<bool?> showWithConfirm(
+    BuildContext context, {
+    required String message,
+    String? subject,
+    String confirmLabel = 'Xác nhận',
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (_) => _SharePreviewConfirmDialog(
+        message: message,
+        subject: subject,
+        confirmLabel: confirmLabel,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -73,38 +91,13 @@ class SharePreviewDialog extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
           child: const Text('Đóng'),
         ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // SMS button
-            IconButton(
-              icon: const Icon(Icons.message, color: Colors.green),
-              tooltip: 'Gửi SMS',
-              onPressed: () {
-                Navigator.pop(context);
-                _sendSMS(context, message);
-              },
-            ),
-            // Zalo button
-            IconButton(
-              icon: Icon(Icons.chat, color: Colors.blue.shade700),
-              tooltip: 'Gửi qua Zalo',
-              onPressed: () {
-                Navigator.pop(context);
-                _sendZalo(context, message);
-              },
-            ),
-            const SizedBox(width: 4),
-            // Share button
-            FilledButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                Share.share(message, subject: subject);
-              },
-              icon: const Icon(Icons.share, size: 18),
-              label: const Text('Chia sẻ'),
-            ),
-          ],
+        FilledButton.icon(
+          onPressed: () {
+            Navigator.pop(context);
+            Share.share(message, subject: subject);
+          },
+          icon: const Icon(Icons.share, size: 18),
+          label: const Text('Chia sẻ'),
         ),
       ],
     );
@@ -138,5 +131,88 @@ class SharePreviewDialog extends StatelessWidget {
     } else {
       Share.share(message);
     }
+  }
+}
+
+/// Variant of SharePreviewDialog with an explicit confirm action.
+/// Pops with [true] on confirm, [null/false] on cancel.
+class _SharePreviewConfirmDialog extends StatelessWidget {
+  final String message;
+  final String? subject;
+  final String confirmLabel;
+
+  const _SharePreviewConfirmDialog({
+    required this.message,
+    required this.confirmLabel,
+    this.subject,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.auto_awesome, size: 22, color: Colors.deepPurple),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Xem trước — Share thông minh')),
+          IconButton(
+            icon: const Icon(Icons.copy, size: 20),
+            tooltip: 'Sao chép',
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: message));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Đã sao chép nội dung')),
+              );
+            },
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.40,
+                ),
+                child: SingleChildScrollView(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: SelectableText(
+                      message,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actionsAlignment: MainAxisAlignment.spaceBetween,
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Hủy'),
+        ),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple),
+          onPressed: () {
+            Navigator.pop(context, true);
+            Share.share(message, subject: subject);
+          },
+          icon: const Icon(Icons.share, size: 18),
+          label: Text(confirmLabel),
+        ),
+      ],
+    );
   }
 }

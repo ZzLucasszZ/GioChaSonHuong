@@ -529,6 +529,36 @@ class OrderProvider extends ChangeNotifier {
 
   // ─── Internal helpers ───────────────────────────────────────────────
 
+  /// Mark all unshared unpaid orders AND general payments for a restaurant as shared.
+  /// Called after confirming smart share. Returns count of orders marked.
+  Future<int> markOrdersAsShared(String restaurantId) async {
+    try {
+      // Mark orders and payments in parallel — both are independent writes
+      final results = await Future.wait([
+        _repository.markOrdersAsShared(restaurantId),
+        _paymentRepository.markPaymentsAsShared(restaurantId),
+      ]);
+      _triggerAutoBackup();
+      return results[0]; // return count of orders marked
+    } catch (e, stack) {
+      AppLogger.error('Failed to mark as shared', error: e, stackTrace: stack, tag: 'OrderProvider');
+      return 0;
+    }
+  }
+
+  /// Remove share mark from a single order (undo smart share).
+  Future<bool> unmarkOrderShared(String orderId) async {
+    try {
+      await _repository.unmarkOrderShared(orderId);
+      _triggerAutoBackup();
+      return true;
+    } catch (e, stack) {
+      AppLogger.error('Failed to unmark order shared', error: e, stackTrace: stack, tag: 'OrderProvider');
+      return false;
+    }
+  }
+
+
   /// Deduct inventory stock for every item in the given order.
   /// Uses delivery-safe stock-out (allows negative stock).
   /// Silently skips items whose product no longer exists.

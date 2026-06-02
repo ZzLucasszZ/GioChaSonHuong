@@ -670,6 +670,35 @@ class OrderRepository extends BaseRepository<Order> {
     return result;
   }
 
+  /// Mark all unshared unpaid orders for a restaurant as shared (smart share).
+  /// Returns the count of orders marked.
+  Future<int> markOrdersAsShared(String restaurantId) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update(
+      tableName,
+      {DbConstants.colDebtSharedAt: now},
+      where: '''
+        ${DbConstants.colRestaurantId} = ?
+        AND ${DbConstants.colDebtSharedAt} IS NULL
+        AND ${DbConstants.colPaymentStatus} != 'paid'
+        AND ${DbConstants.colStatus} != 'cancelled'
+      ''',
+      whereArgs: [restaurantId],
+    );
+  }
+
+  /// Remove the share mark from a single order (undo smart share for that order).
+  Future<void> unmarkOrderShared(String orderId) async {
+    final db = await database;
+    await db.update(
+      tableName,
+      {DbConstants.colDebtSharedAt: null},
+      where: '${DbConstants.colId} = ?',
+      whereArgs: [orderId],
+    );
+  }
+
   /// Get all unpaid orders (unpaid + partial) with restaurant info
   Future<List<Order>> getUnpaidOrders() async {
     final db = await database;
