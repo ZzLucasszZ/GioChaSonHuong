@@ -50,3 +50,6 @@ app.*.map.json
 
 # Windows reserved device names (cannot be tracked by Git)
 /nul
+
+# OAuth secrets — chứa credentials thật, KHÔNG commit
+lib/core/constants/app_secrets.dart
